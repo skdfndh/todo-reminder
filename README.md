@@ -2,6 +2,16 @@
 
 一款纯本地的待办事项提醒 App，Flutter 编写，支持 Android / iOS。以「按天」为视角记录待办，到点弹窗提醒，无需后端、无需登录，数据全部存在手机本地。
 
+## 下载安装
+
+最新版本 APK 见 [Releases](https://github.com/skdfndh/todo-reminder/releases)，按手机 CPU 架构选择：
+
+- [arm64-v8a（大多数现代手机）](https://github.com/skdfndh/todo-reminder/releases/download/v1.0.0/app-arm64-v8a-release.apk)
+- [armeabi-v7a（老款 32 位设备）](https://github.com/skdfndh/todo-reminder/releases/download/v1.0.0/app-armeabi-v7a-release.apk)
+- [x86_64（模拟器）](https://github.com/skdfndh/todo-reminder/releases/download/v1.0.0/app-x86_64-release.apk)
+
+> 安装时如提示「未知来源」请允许；首次打开请允许「通知」和「精确闹钟」权限，否则到点无法准时提醒。
+
 ## 功能
 
 - **按天视图**：首页重点展示「今天」的待办，未来待办折叠为「未来待办」缩略，可逐日翻看、点日期跳转；每天午夜 0 点自动跨天。
