@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/task.dart';
 import '../providers/task_providers.dart';
 import '../theme.dart';
+import '../utils/routes.dart';
+import '../widgets/pressable_scale.dart';
 import '../widgets/task_tile.dart';
 import '../widgets/update_dialog.dart';
 import 'settings_screen.dart';
@@ -83,6 +85,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final tasksAsync = ref.watch(tasksProvider);
     final mode = ref.watch(sortModeProvider);
     final doneLast = ref.watch(doneLastProvider);
+    final reduce = MediaQuery.disableAnimationsOf(context);
 
     return Scaffold(
       appBar: AppBar(
@@ -91,22 +94,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         foregroundColor: AppColors.ink,
         elevation: 0,
         actions: [
-          IconButton(
-            tooltip: '设置',
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const SettingsScreen()),
+          PressableScale(
+            child: IconButton(
+              tooltip: '设置',
+              icon: const Icon(Icons.settings_outlined),
+              onPressed: () => Navigator.of(context)
+                  .push(fadeSlideRoute(const SettingsScreen())),
             ),
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: AppColors.ink,
-        foregroundColor: AppColors.surface,
-        onPressed: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const TaskEditScreen()),
+      floatingActionButton: PressableScale(
+        scale: 0.95,
+        child: FloatingActionButton(
+          backgroundColor: AppColors.ink,
+          foregroundColor: AppColors.surface,
+          elevation: 4,
+          onPressed: () => Navigator.of(context)
+              .push(fadeSlideRoute(const TaskEditScreen())),
+          child: const Icon(Icons.add),
         ),
-        child: const Icon(Icons.add),
       ),
       body: Column(
         children: [
@@ -131,49 +138,60 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 );
                 final future = _isToday ? _futureOnce(tasks) : const <Task>[];
 
-                if (active.isEmpty && future.isEmpty) {
-                  return _EmptyState(isToday: _isToday, selected: _selected);
-                }
-
-                return ListView(
-                  padding: const EdgeInsets.only(bottom: 96),
-                  children: [
-                    if (active.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-                        child: Text(
-                          _isToday ? '今天' : '${_selected.month}月${_selected.day}日',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleSmall
-                              ?.copyWith(color: AppColors.muted),
-                        ),
-                      ),
-                    for (final t in active)
-                      TaskTile(
-                        task: t,
-                        done: t.isDoneOn(_selected),
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => TaskEditScreen(task: t),
+                // 切换日期时内容淡入，避免瞬间替换突兀（低频主动操作）。
+                return AnimatedSwitcher(
+                  duration: reduce
+                      ? Duration.zero
+                      : const Duration(milliseconds: 180),
+                  switchInCurve: Curves.easeOut,
+                  child: KeyedSubtree(
+                    key: ValueKey(dateKey(_selected)),
+                    child: (active.isEmpty && future.isEmpty)
+                        ? _EmptyState(isToday: _isToday, selected: _selected)
+                        : ListView(
+                            padding: const EdgeInsets.only(bottom: 96),
+                            children: [
+                              if (active.isNotEmpty)
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                                  child: Text(
+                                    _isToday
+                                        ? '今天'
+                                        : '${_selected.month}月${_selected.day}日',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleSmall
+                                        ?.copyWith(color: AppColors.muted),
+                                  ),
+                                ),
+                              for (final t in active)
+                                TaskTile(
+                                  task: t,
+                                  done: t.isDoneOn(_selected),
+                                  onTap: () => Navigator.of(context).push(
+                                    fadeSlideRoute(TaskEditScreen(task: t)),
+                                  ),
+                                  onToggleDone: () => ref
+                                      .read(tasksProvider.notifier)
+                                      .toggleDone(t),
+                                  onTogglePin: () => ref
+                                      .read(tasksProvider.notifier)
+                                      .togglePin(t),
+                                  onDelete: () => _confirmDelete(t),
+                                ),
+                              if (future.isNotEmpty)
+                                _FutureSection(
+                                  tasks: future,
+                                  onOpen: (t) {
+                                    final d = DateTime.parse(t.date!);
+                                    setState(() => _selected = DateTime(
+                                        d.year, d.month, d.day));
+                                  },
+                                ),
+                            ],
                           ),
-                        ),
-                        onToggleDone: () =>
-                            ref.read(tasksProvider.notifier).toggleDone(t),
-                        onTogglePin: () =>
-                            ref.read(tasksProvider.notifier).togglePin(t),
-                        onDelete: () => _confirmDelete(t),
-                      ),
-                    if (future.isNotEmpty)
-                      _FutureSection(
-                        tasks: future,
-                        onOpen: (t) {
-                          final d = DateTime.parse(t.date!);
-                          setState(() => _selected =
-                              DateTime(d.year, d.month, d.day));
-                        },
-                      ),
-                  ],
+                  ),
                 );
               },
             ),
@@ -248,50 +266,60 @@ class _DateHeader extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
       child: Row(
         children: [
-          IconButton(onPressed: onPrev, icon: const Icon(Icons.chevron_left)),
+          PressableScale(
+            child: IconButton(
+                onPressed: onPrev, icon: const Icon(Icons.chevron_left)),
+          ),
           Expanded(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: onJump,
-              child: Column(
-                children: [
-                  Text(
-                    title,
-                    style: theme.textTheme.headlineMedium?.copyWith(
-                      color: AppColors.ink,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        weekday,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: AppColors.muted,
-                        ),
+            child: PressableScale(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: onJump,
+                child: Column(
+                  children: [
+                    Text(
+                      title,
+                      style: theme.textTheme.headlineMedium?.copyWith(
+                        color: AppColors.ink,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1,
                       ),
-                      if (!isToday) ...[
-                        const SizedBox(width: 8),
-                        GestureDetector(
-                          onTap: onGoToday,
-                          child: Text(
-                            '回到今天',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: AppColors.ink,
-                              fontWeight: FontWeight.w600,
-                            ),
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          weekday,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: AppColors.muted,
                           ),
                         ),
+                        if (!isToday) ...[
+                          const SizedBox(width: 8),
+                          PressableScale(
+                            child: GestureDetector(
+                              onTap: onGoToday,
+                              child: Text(
+                                '回到今天',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: AppColors.ink,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
-                    ],
-                  ),
-                ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
-          IconButton(onPressed: onNext, icon: const Icon(Icons.chevron_right)),
+          PressableScale(
+            child: IconButton(
+                onPressed: onNext, icon: const Icon(Icons.chevron_right)),
+          ),
         ],
       ),
     );

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/task.dart';
 import '../providers/task_providers.dart';
 import '../theme.dart';
+import '../widgets/pressable_scale.dart';
 
 const _weekdayNames = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 
@@ -307,14 +308,16 @@ class _TaskEditScreenState extends ConsumerState<TaskEditScreen> {
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: FilledButton(
-            onPressed: _save,
-            style: FilledButton.styleFrom(
-              minimumSize: const Size.fromHeight(52),
-              backgroundColor: AppColors.ink,
-              foregroundColor: AppColors.surface,
+          child: PressableScale(
+            child: FilledButton(
+              onPressed: _save,
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(52),
+                backgroundColor: AppColors.ink,
+                foregroundColor: AppColors.surface,
+              ),
+              child: const Text('保存'),
             ),
-            child: const Text('保存'),
           ),
         ),
       ),
