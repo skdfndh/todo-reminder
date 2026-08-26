@@ -6,12 +6,13 @@
 
 最新版本 APK 见 [Releases](https://github.com/skdfndh/todo-reminder/releases)，按手机 CPU 架构选择：
 
-- [arm64-v8a（大多数现代手机）](https://github.com/skdfndh/todo-reminder/releases/download/v1.0.0/app-arm64-v8a-release.apk)
-- [armeabi-v7a（老款 32 位设备）](https://github.com/skdfndh/todo-reminder/releases/download/v1.0.0/app-armeabi-v7a-release.apk)
-- [x86_64（模拟器）](https://github.com/skdfndh/todo-reminder/releases/download/v1.0.0/app-x86_64-release.apk)
+- [arm64-v8a（大多数现代手机）](https://github.com/skdfndh/todo-reminder/releases/download/v1.3.0/app-arm64-v8a-release.apk)
+- [armeabi-v7a（老款 32 位设备）](https://github.com/skdfndh/todo-reminder/releases/download/v1.3.0/app-armeabi-v7a-release.apk)
+- [x86_64（模拟器）](https://github.com/skdfndh/todo-reminder/releases/download/v1.3.0/app-x86_64-release.apk)
 
 > 安装时如提示「未知来源」请允许；首次打开请允许「通知」和「精确闹钟」权限，否则到点无法准时提醒。
 > 安装过旧版本后再次打开，App 会自动检测 GitHub 上的新版本并引导更新，确认后直接下载安装，无需手动重新下载。
+> 正式签名版（v1.3.0 起）后续版本可在 App 内直接更新；若手机装的是 v1.3.0 之前的旧版本，请先卸载再安装，否则升级会提示「签名不一致」。
 
 ## 功能
 
@@ -23,7 +24,7 @@
 - **统计完成天数**：可开关，开启后累计显示「已完成 N 天」。
 - **重要性涂色**：低（蓝灰）/ 中（橙黄）/ 高（红）三档，卡片框内按重要性涂色。
 - **排序与置顶**：可在「按时间 / 重要性优先」间切换，支持手动置顶；可让已完成自动排在未完成下面。
-- **应用内更新**：打开旧版自动检测 GitHub 上的新版本，确认后按设备架构下载安装。
+- **应用内更新**：打开旧版自动检测 GitHub 上的新版本，弹窗展示新旧版本号与更新内容，确认后按设备架构下载安装。
 - **纯本地**：SQLite 存储，无需账号，换机不自动同步。
 
 ## 技术栈
@@ -57,28 +58,33 @@ APK 产物位于 `build/app/outputs/flutter-apk/`。
 lib/
 ├── main.dart                     # 入口：初始化通知、DB、ProviderScope
 ├── theme.dart                    # 暖纸手账配色
-├── models/
-│   └── task.dart                 # Task 模型 + RepeatType/Priority 枚举 + 时间计算
+├── models/task.dart              # Task 模型 + RepeatType/Priority 枚举 + 时间计算
 ├── utils/
-│   └── schedule.dart             # 下一次提醒时间的纯函数
+│   ├── schedule.dart             # 下一次提醒时间的纯函数
+│   ├── version.dart              # 语义版本比较（应用内更新用）
+│   ├── abi.dart                  # ABI 匹配 APK 资产（应用内更新用）
+│   └── routes.dart               # 统一页面过渡
 ├── data/
 │   ├── database.dart             # SQLite 建库、迁移
 │   └── task_repository.dart      # CRUD
 ├── services/
-│   └── notification_service.dart # 本地通知调度、权限、取消、重排
-├── providers/
-│   └── task_providers.dart       # Riverpod 状态 + 排序 + 打勾/置顶/跨天
+│   ├── notification_service.dart # 本地通知调度、权限、取消、重排
+│   └── update_service.dart       # 检查更新：拉取 release、比较版本、下载
+├── providers/task_providers.dart # Riverpod 状态 + 排序 + 打勾/置顶/跨天 + 更新
 ├── screens/
 │   ├── home_screen.dart          # 按天视图首页
 │   ├── task_edit_screen.dart     # 新建/编辑表单
 │   └── settings_screen.dart      # 排序设置
 └── widgets/
-    └── task_tile.dart            # 待办卡片
+    ├── task_tile.dart            # 待办卡片
+    ├── update_dialog.dart        # 更新弹窗与下载进度
+    └── pressable_scale.dart      # 按压反馈
 ```
 
 ## 说明
 
 - **通知权限**：Android 13+ 请求通知权限，Android 14+ 请求「精确闹钟」权限；被拒时降级为非精确调度（可能延迟几分钟）。
+- **正式签名**：发布版用固定 release keystore 签名（本地 `android/key.properties` + GitHub Secrets），保证应用内更新可无缝升级。
 - **desugaring**：`flutter_local_notifications` v22 需要 core library desugaring，已在 `android/app/build.gradle.kts` 配置，请勿删除。
 - **代理**：`android/gradle.properties` 里配置了本地代理（`127.0.0.1:7890`）供 Gradle 下载依赖，无代理环境可删除这几行。
 

@@ -1,7 +1,7 @@
 # 待办提醒（todo-reminder）开发进度
 
 > 最后更新：2026-08-26
-> 仓库：https://github.com/skdfndh/todo-reminder（私有）
+> 仓库：https://github.com/skdfndh/todo-reminder（公开）
 
 ## 项目概述
 
@@ -54,6 +54,13 @@
 - UI 细节优化：首页「回到今天」改为直接跳回今天（不再弹日历）；新建待办选择重要性时圈内不再显示勾号；设置新增「已完成排后面」开关，已完成的自动排在未完成下面。
 - 新增 `version.dart`（语义版本比较）、`abi.dart`（ABI 匹配资产）纯函数工具及其单测。
 
+### 第七阶段：UI 动效打磨 + 正式签名（2026-08-26）
+- **UI 动效打磨**（按 emil-design-eng 框架）：按钮/卡片按压反馈（`PressableScale`，scale 0.97）；打勾勾号淡入动画；统一页面过渡（`fadeSlideRoute`，进 250ms / 出 150ms）；切换日期列表淡入；卡片暖阴影；所有动效尊重系统「减少动画」。
+- **更新弹窗优化**：展示新旧版本号、更新内容，并提示先打开网络代理再点击更新。
+- **正式签名**：生成固定 release keystore（`android/app/upload-keystore.jks`，gitignore），密码存本地 `android/key.properties` + GitHub Secrets；`build.gradle.kts` 与 `release.yml` 改用正式签名，本地与 CI 构建签名一致。
+- 修复应用内更新「签名不一致」：此前 CI 每次随机生成 debug 签名导致版本间无法覆盖安装；配置固定 keystore 后统一。
+- 发布 **Release v1.3.0**。
+
 ---
 
 ## 已完成功能清单
@@ -69,7 +76,9 @@
 | 重要性涂色 | 低/中/高三档，卡片框内按重要性涂色 |
 | 排序与置顶 | 按时间 / 重要性优先可切换，支持手动置顶 |
 | 已完成排后面 | 设置开关，已完成的自动排在未完成下面 |
-| 应用内更新 | 启动检测 GitHub 新版本，确认后按 ABI 下载安装 |
+| 应用内更新 | 启动检测 GitHub 新版本，展示新旧版本号与内容，按 ABI 下载安装 |
+| UI 动效打磨 | 按压反馈、打勾动画、统一页面过渡、日期切换淡入 |
+| 正式签名 | 固定 keystore 签名，应用内更新可无缝升级 |
 | 纯本地存储 | SQLite，无需账号 |
 
 ---
@@ -95,7 +104,8 @@ lib/
 ├── utils/
 │   ├── schedule.dart             # 下一次提醒时间的纯函数
 │   ├── version.dart              # 语义版本比较（纯函数）
-│   └── abi.dart                  # ABI 匹配 APK 资产（纯函数）
+│   ├── abi.dart                  # ABI 匹配 APK 资产（纯函数）
+│   └── routes.dart               # 统一页面过渡
 ├── data/
 │   ├── database.dart             # SQLite 建库、迁移
 │   └── task_repository.dart      # CRUD
@@ -104,7 +114,7 @@ lib/
 │   └── update_service.dart       # 检查更新：拉取 release、比较版本、下载
 ├── providers/task_providers.dart # 状态 + 排序 + 打勾/置顶/跨天 + 更新检查
 ├── screens/{home,task_edit,settings}_screen.dart
-└── widgets/{task_tile,update_dialog}.dart
+└── widgets/{task_tile,update_dialog,pressable_scale}.dart
 test/{schedule_test,task_test,version_test,abi_test}.dart
 .github/workflows/release.yml
 ```
@@ -117,8 +127,8 @@ test/{schedule_test,task_test,version_test,abi_test}.dart
 
 | 项 | 值 |
 |----|-----|
-| 仓库 | https://github.com/skdfndh/todo-reminder（私有） |
-| Release | v1.0.0（3 个 APK） |
+| 仓库 | https://github.com/skdfndh/todo-reminder（公开） |
+| Release | v1.3.0（3 个 APK） |
 | CI | 推送 `v*` 标签自动构建 + 发 Release |
 | 验证命令 | `flutter analyze` / `flutter test` / `flutter build apk` |
 
@@ -131,6 +141,7 @@ test/{schedule_test,task_test,version_test,abi_test}.dart
 - 本地代理已移至 `~/.gradle/gradle.properties`，仓库内无代理配置，CI 不受影响。
 - GitHub API 对缺失 `User-Agent` 的请求直接 403，`update_service.dart` 已显式设置。
 - 主 `AndroidManifest.xml` 必须保留 `INTERNET` 权限，否则 release 构建无联网能力，应用内更新会失败。
+- release 使用固定 keystore 签名：keystore 文件与 `android/key.properties` 已 gitignore，CI 通过 GitHub Secrets（`KEYSTORE_BASE64` / `KEYSTORE_PASSWORD`）注入；**密钥丢失会导致无法再给新版签名**，务必备份。
 
 ---
 
@@ -149,7 +160,6 @@ test/{schedule_test,task_test,version_test,abi_test}.dart
 - [ ] **搜索**：按标题/备注搜索。
 
 ### 工程类
-- [ ] **正式签名**：当前 release 用 debug 签名，只能自装；上架需 keystore + GitHub Secrets。
 - [ ] **清理 open_filex 附带权限**：上架商店前移除其合并进来的 `READ_MEDIA_*` 等多余存储权限。
 - [ ] **Widget / 集成测试**：目前只有纯逻辑单元测试，缺界面测试。
 - [ ] **iOS 构建验证**：Windows 上未验证 iOS 端（需 Mac）。
@@ -160,6 +170,6 @@ test/{schedule_test,task_test,version_test,abi_test}.dart
 
 ## 当前状态
 
-代码功能完整可用：`flutter analyze` 0 问题、25 个单元测试通过、debug/release APK 均可打包。剩余主要是功能增强与工程化完善，见上方 TODO。
+代码功能完整可用：`flutter analyze` 0 问题、28 个单元测试通过、debug/release APK 均可打包；release 使用固定 keystore 正式签名。剩余主要是功能增强与工程化完善，见上方 TODO。
 
-> 仓库当前为私有。应用内更新依赖公开的 GitHub API 与资产下载，启用前请先在 GitHub 网页把仓库改为公开。
+> 仓库已改为公开，应用内更新可用。v1.3.0 起使用正式签名，后续版本可应用内无缝更新；从 v1.3.0 之前的旧版本升级需先卸载重装一次。
