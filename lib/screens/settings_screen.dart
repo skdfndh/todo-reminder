@@ -10,6 +10,7 @@ class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final mode = ref.watch(sortModeProvider);
+    final doneLast = ref.watch(doneLastProvider);
     return Scaffold(
       appBar: AppBar(
         title: const Text('设置'),
@@ -48,6 +49,14 @@ class SettingsScreen extends ConsumerWidget {
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('已完成排后面'),
+            subtitle: const Text('已完成的待办自动排在未完成下面'),
+            value: doneLast,
+            onChanged: (v) =>
+                ref.read(doneLastProvider.notifier).state = v,
           ),
           const SizedBox(height: 24),
           Text('关于跨天', style: Theme.of(context).textTheme.titleMedium),

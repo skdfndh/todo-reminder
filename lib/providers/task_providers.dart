@@ -4,6 +4,7 @@ import '../data/database.dart';
 import '../data/task_repository.dart';
 import '../models/task.dart';
 import '../services/notification_service.dart';
+import '../services/update_service.dart';
 
 /// 列表排序方式。
 enum SortMode {
@@ -23,7 +24,14 @@ final notificationServiceProvider = Provider<NotificationService>((ref) {
   return NotificationService();
 });
 
+final updateServiceProvider = Provider<UpdateService>((ref) {
+  return UpdateService();
+});
+
 final sortModeProvider = StateProvider<SortMode>((ref) => SortMode.time);
+
+/// 是否把已完成的待办自动排在未完成下面。
+final doneLastProvider = StateProvider<bool>((ref) => false);
 
 final tasksProvider =
     AsyncNotifierProvider<TasksNotifier, List<Task>>(TasksNotifier.new);
@@ -31,11 +39,13 @@ final tasksProvider =
 String dateKey(DateTime d) =>
     '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
-/// 按排序方式排序（置顶最前，其次重要性/时间）。
-List<Task> sortTasks(List<Task> tasks, SortMode mode) {
+/// 按排序方式排序（置顶最前，其次已完成分组，再其次重要性/时间）。
+List<Task> sortTasks(List<Task> tasks, SortMode mode, {bool doneLast = false}) {
   final now = DateTime.now();
   int cmp(Task a, Task b) {
     if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
+    // 开关开启时，已完成的统一排到未完成下面（置顶仍最前）。
+    if (doneLast && a.doneToday != b.doneToday) return a.doneToday ? 1 : -1;
     if (mode == SortMode.importance && a.priority.value != b.priority.value) {
       return b.priority.value.compareTo(a.priority.value);
     }

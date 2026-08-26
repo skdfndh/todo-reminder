@@ -48,6 +48,12 @@
 - 配置 **GitHub Action**（`.github/workflows/release.yml`）：推送 `v*` 标签自动测试 + 打包 + 发 Release。
 - 把本地代理配置从仓库 `gradle.properties` 移到本机 `~/.gradle/gradle.properties`，避免破坏 CI。
 
+### 第六阶段：应用内更新 + UI 细节优化（2026-08-26）
+- **应用内更新**：启动时异步请求 GitHub 公开 API 的 `releases/latest`，与本地版本比较，有新版本则弹窗；确认后按设备 ABI（`device_info_plus`）选对应 APK，`dio` 带进度下载，`open_filex` 唤起系统安装器。异常一律静默，不打扰用户。
+- 主 `AndroidManifest.xml` 补 `INTERNET`（此前 release 构建无联网权限，是本功能的前提）与 `REQUEST_INSTALL_PACKAGES`。
+- UI 细节优化：首页「回到今天」改为直接跳回今天（不再弹日历）；新建待办选择重要性时圈内不再显示勾号；设置新增「已完成排后面」开关，已完成的自动排在未完成下面。
+- 新增 `version.dart`（语义版本比较）、`abi.dart`（ABI 匹配资产）纯函数工具及其单测。
+
 ---
 
 ## 已完成功能清单
@@ -62,6 +68,8 @@
 | 统计完成天数 | 可开关，累计显示「已完成 N 天」 |
 | 重要性涂色 | 低/中/高三档，卡片框内按重要性涂色 |
 | 排序与置顶 | 按时间 / 重要性优先可切换，支持手动置顶 |
+| 已完成排后面 | 设置开关，已完成的自动排在未完成下面 |
+| 应用内更新 | 启动检测 GitHub 新版本，确认后按 ABI 下载安装 |
 | 纯本地存储 | SQLite，无需账号 |
 
 ---
@@ -75,6 +83,7 @@
 | 时区 | `timezone` + `flutter_timezone` |
 | 存储 | `sqflite`（SQLite） |
 | 状态管理 | `flutter_riverpod` |
+| 应用内更新 | `dio` + `package_info_plus` + `device_info_plus` + `open_filex` |
 
 ## 项目结构
 
@@ -83,15 +92,20 @@ lib/
 ├── main.dart                     # 入口：初始化通知、DB、ProviderScope
 ├── theme.dart                    # 暖纸手账配色
 ├── models/task.dart              # Task 模型 + RepeatType/Priority 枚举 + 时间计算
-├── utils/schedule.dart           # 下一次提醒时间的纯函数
+├── utils/
+│   ├── schedule.dart             # 下一次提醒时间的纯函数
+│   ├── version.dart              # 语义版本比较（纯函数）
+│   └── abi.dart                  # ABI 匹配 APK 资产（纯函数）
 ├── data/
 │   ├── database.dart             # SQLite 建库、迁移
 │   └── task_repository.dart      # CRUD
-├── services/notification_service.dart
-├── providers/task_providers.dart # 状态 + 排序 + 打勾/置顶/跨天
+├── services/
+│   ├── notification_service.dart # 本地通知调度、权限、取消、重排
+│   └── update_service.dart       # 检查更新：拉取 release、比较版本、下载
+├── providers/task_providers.dart # 状态 + 排序 + 打勾/置顶/跨天 + 更新检查
 ├── screens/{home,task_edit,settings}_screen.dart
-└── widgets/task_tile.dart
-test/{schedule_test,task_test}.dart
+└── widgets/{task_tile,update_dialog}.dart
+test/{schedule_test,task_test,version_test,abi_test}.dart
 .github/workflows/release.yml
 ```
 
@@ -115,6 +129,8 @@ test/{schedule_test,task_test}.dart
 - `flutter_local_notifications` v22 需要 core library desugaring（`android/app/build.gradle.kts`）。
 - JDK 25 下 Kotlin 增量编译缓存关闭失败 → `kotlin.incremental=false`（`android/gradle.properties`）。
 - 本地代理已移至 `~/.gradle/gradle.properties`，仓库内无代理配置，CI 不受影响。
+- GitHub API 对缺失 `User-Agent` 的请求直接 403，`update_service.dart` 已显式设置。
+- 主 `AndroidManifest.xml` 必须保留 `INTERNET` 权限，否则 release 构建无联网能力，应用内更新会失败。
 
 ---
 
@@ -134,6 +150,7 @@ test/{schedule_test,task_test}.dart
 
 ### 工程类
 - [ ] **正式签名**：当前 release 用 debug 签名，只能自装；上架需 keystore + GitHub Secrets。
+- [ ] **清理 open_filex 附带权限**：上架商店前移除其合并进来的 `READ_MEDIA_*` 等多余存储权限。
 - [ ] **Widget / 集成测试**：目前只有纯逻辑单元测试，缺界面测试。
 - [ ] **iOS 构建验证**：Windows 上未验证 iOS 端（需 Mac）。
 - [ ] **多语言（i18n）**：目前仅中文。
@@ -143,4 +160,6 @@ test/{schedule_test,task_test}.dart
 
 ## 当前状态
 
-代码功能完整可用：`flutter analyze` 0 问题、17 个单元测试通过、debug/release APK 均可打包。剩余主要是功能增强与工程化完善，见上方 TODO。
+代码功能完整可用：`flutter analyze` 0 问题、25 个单元测试通过、debug/release APK 均可打包。剩余主要是功能增强与工程化完善，见上方 TODO。
+
+> 仓库当前为私有。应用内更新依赖公开的 GitHub API 与资产下载，启用前请先在 GitHub 网页把仓库改为公开。

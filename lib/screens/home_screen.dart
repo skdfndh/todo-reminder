@@ -7,6 +7,7 @@ import '../models/task.dart';
 import '../providers/task_providers.dart';
 import '../theme.dart';
 import '../widgets/task_tile.dart';
+import '../widgets/update_dialog.dart';
 import 'settings_screen.dart';
 import 'task_edit_screen.dart';
 
@@ -42,6 +43,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ref.read(tasksProvider.notifier).rollover();
       }
     });
+    // 首帧渲染后后台检查更新（fire-and-forget，异常内部静默，不阻塞启动）。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(checkForUpdatesAndPrompt(context, ref));
+    });
   }
 
   @override
@@ -54,6 +59,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   void _shift(int days) {
     setState(() => _selected = _selected.add(Duration(days: days)));
+  }
+
+  void _goToday() {
+    final n = DateTime.now();
+    setState(() => _selected = DateTime(n.year, n.month, n.day));
   }
 
   Future<void> _jump() async {
@@ -72,6 +82,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget build(BuildContext context) {
     final tasksAsync = ref.watch(tasksProvider);
     final mode = ref.watch(sortModeProvider);
+    final doneLast = ref.watch(doneLastProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -105,6 +116,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             onPrev: () => _shift(-1),
             onNext: () => _shift(1),
             onJump: _jump,
+            onGoToday: _goToday,
           ),
           Expanded(
             child: tasksAsync.when(
@@ -114,6 +126,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 final active = sortTasks(
                   tasks.where((t) => t.isActiveOn(_selected)).toList(),
                   mode,
+                  doneLast: doneLast,
                 );
                 final future = _isToday ? _futureOnce(tasks) : const <Task>[];
 
@@ -178,6 +191,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         return DateTime(d.year, d.month, d.day).isAfter(todayOnly);
       }).toList(),
       ref.read(sortModeProvider),
+      doneLast: ref.read(doneLastProvider),
     );
   }
 
@@ -212,6 +226,7 @@ class _DateHeader extends StatelessWidget {
     required this.onPrev,
     required this.onNext,
     required this.onJump,
+    required this.onGoToday,
   });
 
   final DateTime selected;
@@ -219,6 +234,7 @@ class _DateHeader extends StatelessWidget {
   final VoidCallback onPrev;
   final VoidCallback onNext;
   final VoidCallback onJump;
+  final VoidCallback onGoToday;
 
   @override
   Widget build(BuildContext context) {
@@ -256,7 +272,7 @@ class _DateHeader extends StatelessWidget {
                       if (!isToday) ...[
                         const SizedBox(width: 8),
                         GestureDetector(
-                          onTap: onJump,
+                          onTap: onGoToday,
                           child: Text(
                             '回到今天',
                             style: theme.textTheme.bodySmall?.copyWith(

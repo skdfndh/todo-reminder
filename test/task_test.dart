@@ -107,5 +107,18 @@ void main() {
       final impRest = byImp.skip(1).toList();
       expect(impRest[0].priority, Priority.high);
     });
+
+    test('doneLast 开启时已完成的排在未完成下面', () {
+      final done = _task(date: '2027-01-01').copyWith(doneToday: true);
+      final pending = _task(date: '2027-01-02');
+
+      // 开关关闭：按时间，已完成（01-01）在前
+      final off = sortTasks([done, pending], SortMode.time);
+      expect(off.map((e) => e.doneToday).toList(), [true, false]);
+
+      // 开关开启：未完成排前
+      final on = sortTasks([done, pending], SortMode.time, doneLast: true);
+      expect(on.map((e) => e.doneToday).toList(), [false, true]);
+    });
   });
 }

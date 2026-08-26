@@ -284,6 +284,8 @@ class _TaskEditScreenState extends ConsumerState<TaskEditScreen> {
                 ChoiceChip(
                   label: Text(p.label),
                   selected: _priority == p,
+                  // 只靠圈内填色区分选中态，不要勾号。
+                  showCheckmark: false,
                   avatar: CircleAvatar(
                     radius: 6,
                     backgroundColor: priorityColor(p),
