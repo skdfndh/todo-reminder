@@ -127,6 +127,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   tasks.where((t) => t.isActiveOn(_selected)).toList(),
                   mode,
                   doneLast: doneLast,
+                  viewDay: _selected,
                 );
                 final future = _isToday ? _futureOnce(tasks) : const <Task>[];
 
@@ -151,6 +152,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     for (final t in active)
                       TaskTile(
                         task: t,
+                        done: t.isDoneOn(_selected),
                         onTap: () => Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (_) => TaskEditScreen(task: t),
@@ -192,6 +194,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       }).toList(),
       ref.read(sortModeProvider),
       doneLast: ref.read(doneLastProvider),
+      viewDay: todayOnly,
     );
   }
 

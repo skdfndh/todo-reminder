@@ -40,12 +40,20 @@ String dateKey(DateTime d) =>
     '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
 /// 按排序方式排序（置顶最前，其次已完成分组，再其次重要性/时间）。
-List<Task> sortTasks(List<Task> tasks, SortMode mode, {bool doneLast = false}) {
+///
+/// [viewDay] 为按天视图当前查看的日期：已完成分组按该日期的完成态判断
+/// （非今天查看重复任务时它们都未完成，不参与分组）。
+List<Task> sortTasks(List<Task> tasks, SortMode mode,
+    {bool doneLast = false, DateTime? viewDay}) {
   final now = DateTime.now();
   int cmp(Task a, Task b) {
     if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
     // 开关开启时，已完成的统一排到未完成下面（置顶仍最前）。
-    if (doneLast && a.doneToday != b.doneToday) return a.doneToday ? 1 : -1;
+    if (doneLast) {
+      final da = viewDay == null ? a.doneToday : a.isDoneOn(viewDay);
+      final db = viewDay == null ? b.doneToday : b.isDoneOn(viewDay);
+      if (da != db) return da ? 1 : -1;
+    }
     if (mode == SortMode.importance && a.priority.value != b.priority.value) {
       return b.priority.value.compareTo(a.priority.value);
     }

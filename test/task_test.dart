@@ -88,6 +88,26 @@ void main() {
     });
   });
 
+  group('isDoneOn', () {
+    test('一次性任务完成态与查看日期无关', () {
+      final t = _task(date: '2026-08-30').copyWith(doneToday: true);
+      expect(t.isDoneOn(DateTime(2026, 8, 30)), isTrue);
+      expect(t.isDoneOn(DateTime(2026, 8, 31)), isTrue);
+    });
+
+    test('重复任务只在今天显示已完成，翻到其他日期为未完成', () {
+      final done =
+          _task(repeatType: RepeatType.daily).copyWith(doneToday: true);
+      expect(done.isDoneOn(DateTime.now()), isTrue);
+      expect(
+        done.isDoneOn(DateTime.now().add(const Duration(days: 1))),
+        isFalse,
+      );
+      final pending = _task(repeatType: RepeatType.daily);
+      expect(pending.isDoneOn(DateTime.now()), isFalse);
+    });
+  });
+
   group('sortTasks', () {
     test('置顶优先；重要性模式高在前，时间模式按时间', () {
       final low = _task(date: '2027-01-01', priority: Priority.low);
@@ -119,6 +139,22 @@ void main() {
       // 开关开启：未完成排前
       final on = sortTasks([done, pending], SortMode.time, doneLast: true);
       expect(on.map((e) => e.doneToday).toList(), [false, true]);
+    });
+
+    test('doneLast 在非今天视图不把重复任务当已完成', () {
+      final done = _task(repeatType: RepeatType.daily, hour: 9, minute: 0)
+          .copyWith(doneToday: true);
+      final pending = _task(repeatType: RepeatType.daily, hour: 10, minute: 0);
+      final tomorrow = DateTime.now().add(const Duration(days: 1));
+
+      // 明天视图：重复任务都不算已完成，按时间排（09:00 在前）。
+      final byDay = sortTasks([pending, done], SortMode.time,
+          doneLast: true, viewDay: tomorrow);
+      expect(byDay.first.doneToday, isTrue);
+
+      // 不传视图日（默认按 doneToday）：已完成的排后。
+      final byDone = sortTasks([pending, done], SortMode.time, doneLast: true);
+      expect(byDone.first.doneToday, isFalse);
     });
   });
 }

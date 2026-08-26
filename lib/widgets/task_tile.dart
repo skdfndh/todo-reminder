@@ -12,6 +12,7 @@ class TaskTile extends StatelessWidget {
     required this.onToggleDone,
     required this.onTogglePin,
     required this.onDelete,
+    this.done,
   });
 
   final Task task;
@@ -19,6 +20,9 @@ class TaskTile extends StatelessWidget {
   final VoidCallback onToggleDone;
   final VoidCallback onTogglePin;
   final VoidCallback onDelete;
+
+  /// 打勾显示状态；不传则用 task.doneToday（按天视图下由调用方传入视图日的完成态）。
+  final bool? done;
 
   @override
   Widget build(BuildContext context) {
@@ -31,7 +35,7 @@ class TaskTile extends StatelessWidget {
 
     final color = priorityColor(task.priority);
     final tint = priorityTint(task.priority);
-    final done = task.doneToday;
+    final done = this.done ?? task.doneToday;
 
     final subtitleParts = <String>[
       task.timeLabel,

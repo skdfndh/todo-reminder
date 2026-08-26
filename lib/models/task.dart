@@ -169,6 +169,15 @@ class Task {
     }
   }
 
+  /// 在 [day] 这一天的视图下是否显示为「已完成」。
+  ///
+  /// 一次性任务完成即永久（doneToday 跨天不复位）；重复任务只记录今天的
+  /// 打勾，跨天自动复位，因此翻到过去/未来日期时一律显示未完成。
+  bool isDoneOn(DateTime day) {
+    if (repeatType == RepeatType.once) return doneToday;
+    return _dateOnly(day) == _dateOnly(DateTime.now()) && doneToday;
+  }
+
   /// 从 [from] 之后的下一次提醒发生时间（本地墙钟时间）。
   /// 已超出窗口返回 null；一次性任务若已过期仍返回其原始时间供界面标注。
   DateTime? nextOccurrence(DateTime from) {
