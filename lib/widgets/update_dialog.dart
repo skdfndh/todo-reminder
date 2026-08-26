@@ -19,17 +19,20 @@ Future<void> checkForUpdatesAndPrompt(BuildContext context, WidgetRef ref) async
   final result = await service.checkForUpdate();
   if (result == null || !context.mounted) return;
 
-  final update = await _confirmVersionDialog(context, result);
+  final current = await service.currentVersion();
+  if (!context.mounted) return;
+  final update = await _confirmVersionDialog(context, result, current);
   if (update != true || !context.mounted) return;
   await _downloadAndInstall(context, service, result);
 }
 
-/// 「发现新版本」确认弹窗。
-Future<bool?> _confirmVersionDialog(
-    BuildContext context, UpdateCheckResult result) {
+/// 「发现新版本」确认弹窗：新旧版本号、更新内容，并提醒先打开网络代理。
+Future<bool?> _confirmVersionDialog(BuildContext context,
+    UpdateCheckResult result, String? currentVersion) {
   return showDialog<bool>(
     context: context,
     builder: (ctx) {
+      final theme = Theme.of(ctx);
       final notes = result.releaseNotes.trim();
       return AlertDialog(
         title: Text('发现新版本 v${result.latestVersion}'),
@@ -38,21 +41,44 @@ Future<bool?> _confirmVersionDialog(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text('是否立即更新？'),
+            const SizedBox(height: 12),
+            // 新旧版本号对比。
+            Text(
+              '当前版本 v${currentVersion ?? '?'}  →  新版本 v${result.latestVersion}',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: AppColors.ink,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
             if (notes.isNotEmpty) ...[
               const SizedBox(height: 12),
+              Text(
+                '本次更新：',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: AppColors.ink,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 4),
               ConstrainedBox(
                 constraints: const BoxConstraints(maxHeight: 160),
                 child: SingleChildScrollView(
                   child: Text(
                     notes,
-                    style: Theme.of(ctx)
-                        .textTheme
-                        .bodySmall
+                    style: theme.textTheme.bodySmall
                         ?.copyWith(color: AppColors.muted),
                   ),
                 ),
               ),
             ],
+            const SizedBox(height: 12),
+            // 下载来源提示：GitHub 需要网络代理。
+            Text(
+              '提示：更新包托管在 GitHub，请先打开网络代理（梯子）再点击「立即更新」，以免下载失败。',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: AppColors.high,
+              ),
+            ),
           ],
         ),
         actions: [
