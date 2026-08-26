@@ -48,12 +48,15 @@ android {
                 ?: keystoreProperties.getProperty("storeFile")
             if (storeFileProp != null) {
                 storeFile = file(storeFileProp)
-                storePassword = System.getenv("KEYSTORE_PASSWORD")
+                val storePwd = System.getenv("KEYSTORE_PASSWORD")
                     ?: keystoreProperties.getProperty("storePassword")
+                storePassword = storePwd
                 keyAlias = System.getenv("KEYSTORE_KEY_ALIAS")
                     ?: keystoreProperties.getProperty("keyAlias", "todo_reminder")
+                // keytool 生成时 keypass 与 storepass 相同，未单独配置时兜底到 store 密码。
                 keyPassword = System.getenv("KEYSTORE_KEY_PASSWORD")
                     ?: keystoreProperties.getProperty("keyPassword")
+                    ?: storePwd
             }
         }
     }
