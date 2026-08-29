@@ -12,8 +12,10 @@ enum RepeatType {
   /// 界面上显示的中文名。
   final String label;
 
-  static RepeatType fromCode(String code) => RepeatType.values
-      .firstWhere((e) => e.name == code, orElse: () => RepeatType.once);
+  static RepeatType fromCode(String code) => RepeatType.values.firstWhere(
+    (e) => e.name == code,
+    orElse: () => RepeatType.once,
+  );
 }
 
 /// 重要性，值越大越重要。
@@ -27,8 +29,10 @@ enum Priority {
   final String label;
   final int value;
 
-  static Priority fromValue(int v) => Priority.values
-      .firstWhere((e) => e.value == v, orElse: () => Priority.medium);
+  static Priority fromValue(int v) => Priority.values.firstWhere(
+    (e) => e.value == v,
+    orElse: () => Priority.medium,
+  );
 }
 
 DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
@@ -39,9 +43,11 @@ class Task {
     this.id,
     required this.title,
     this.note = '',
+    this.tags = const {},
     required this.repeatType,
     required this.remindHour,
     required this.remindMinute,
+    this.advanceMinutes = 0,
     this.date,
     this.weekdays = const {},
     this.dayOfMonth,
@@ -54,6 +60,7 @@ class Task {
     this.doneToday = false,
     this.doneDate,
     this.doneCount = 0,
+    this.completedDates = const {},
     required this.createdAt,
     required this.updatedAt,
   });
@@ -61,6 +68,7 @@ class Task {
   final int? id;
   final String title;
   final String note;
+  final Set<String> tags;
 
   final RepeatType repeatType;
 
@@ -69,6 +77,8 @@ class Task {
 
   /// 提醒时刻：分钟（0-59）。
   final int remindMinute;
+
+  final int advanceMinutes;
 
   /// 仅 [RepeatType.once] 使用，格式 YYYY-MM-DD。
   final String? date;
@@ -96,7 +106,7 @@ class Task {
   /// 时间窗口结束（仅重复任务），格式 YYYY-MM-DD。
   final String? endDate;
 
-  /// 今天是否已打勾（一次性任务：是否已完成）。
+  /// 当前完成状态。
   final bool doneToday;
 
   /// 本次打勾对应的日期（用于跨天复位判断），格式 YYYY-MM-DD。
@@ -104,6 +114,8 @@ class Task {
 
   /// 累计完成天数。
   final int doneCount;
+
+  final Set<String> completedDates;
 
   final int createdAt;
   final int updatedAt;
@@ -165,18 +177,20 @@ class Task {
       case RepeatType.weekly:
         return weekdays.contains(d.weekday);
       case RepeatType.monthly:
-        return d.day == (dayOfMonth ?? 1);
+        return d.day ==
+            (dayOfMonth ?? 1).clamp(1, daysInMonth(d.year, d.month));
     }
   }
 
   /// 在 [day] 这一天的视图下是否显示为「已完成」。
   ///
-  /// 一次性任务完成即永久（doneToday 跨天不复位）；重复任务只记录今天的
-  /// 打勾，跨天自动复位，因此翻到过去/未来日期时一律显示未完成。
+  /// 完成状态只属于打勾当天；跨天复位后，过去日期不会继续显示为已完成。
   bool isDoneOn(DateTime day) {
-    if (repeatType == RepeatType.once) return doneToday;
-    return _dateOnly(day) == _dateOnly(DateTime.now()) && doneToday;
+    return completedDates.contains(dateKey(day));
   }
+
+  static String dateKey(DateTime day) =>
+      '${day.year.toString().padLeft(4, '0')}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
 
   /// 从 [from] 之后的下一次提醒发生时间（本地墙钟时间）。
   /// 已超出窗口返回 null；一次性任务若已过期仍返回其原始时间供界面标注。
@@ -187,7 +201,12 @@ class Task {
         if (d == null) return null;
         final parsed = DateTime.parse(d);
         return DateTime(
-            parsed.year, parsed.month, parsed.day, remindHour, remindMinute);
+          parsed.year,
+          parsed.month,
+          parsed.day,
+          remindHour,
+          remindMinute,
+        );
       case RepeatType.daily:
         final next = nextDaily(windowFrom(from), remindHour, remindMinute);
         return isPastEnd(next) ? null : next;
@@ -201,8 +220,12 @@ class Task {
         }
         return (earliest == null || isPastEnd(earliest)) ? null : earliest;
       case RepeatType.monthly:
-        final next =
-            nextMonthly(windowFrom(from), dayOfMonth ?? 1, remindHour, remindMinute);
+        final next = nextMonthly(
+          windowFrom(from),
+          dayOfMonth ?? 1,
+          remindHour,
+          remindMinute,
+        );
         return isPastEnd(next) ? null : next;
     }
   }
@@ -234,9 +257,11 @@ class Task {
     int? id,
     String? title,
     String? note,
+    Set<String>? tags,
     RepeatType? repeatType,
     int? remindHour,
     int? remindMinute,
+    int? advanceMinutes,
     Object? date = _unset,
     Set<int>? weekdays,
     Object? dayOfMonth = _unset,
@@ -249,6 +274,7 @@ class Task {
     bool? doneToday,
     Object? doneDate = _unset,
     int? doneCount,
+    Set<String>? completedDates,
     int? createdAt,
     int? updatedAt,
   }) {
@@ -256,22 +282,30 @@ class Task {
       id: id ?? this.id,
       title: title ?? this.title,
       note: note ?? this.note,
+      tags: tags ?? this.tags,
       repeatType: repeatType ?? this.repeatType,
       remindHour: remindHour ?? this.remindHour,
       remindMinute: remindMinute ?? this.remindMinute,
+      advanceMinutes: advanceMinutes ?? this.advanceMinutes,
       date: identical(date, _unset) ? this.date : date as String?,
       weekdays: weekdays ?? this.weekdays,
-      dayOfMonth:
-          identical(dayOfMonth, _unset) ? this.dayOfMonth : dayOfMonth as int?,
+      dayOfMonth: identical(dayOfMonth, _unset)
+          ? this.dayOfMonth
+          : dayOfMonth as int?,
       enabled: enabled ?? this.enabled,
       priority: priority ?? this.priority,
       pinned: pinned ?? this.pinned,
       statisticsEnabled: statisticsEnabled ?? this.statisticsEnabled,
-      startDate: identical(startDate, _unset) ? this.startDate : startDate as String?,
+      startDate: identical(startDate, _unset)
+          ? this.startDate
+          : startDate as String?,
       endDate: identical(endDate, _unset) ? this.endDate : endDate as String?,
       doneToday: doneToday ?? this.doneToday,
-      doneDate: identical(doneDate, _unset) ? this.doneDate : doneDate as String?,
+      doneDate: identical(doneDate, _unset)
+          ? this.doneDate
+          : doneDate as String?,
       doneCount: doneCount ?? this.doneCount,
+      completedDates: completedDates ?? this.completedDates,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -283,9 +317,11 @@ class Task {
     final map = <String, Object?>{
       'title': title,
       'note': note,
+      'tags': tags.isEmpty ? null : (tags.toList()..sort()).join(','),
       'repeat_type': repeatType.name,
       'remind_hour': remindHour,
       'remind_minute': remindMinute,
+      'advance_minutes': advanceMinutes,
       'date': date,
       'weekdays': weekdays.isEmpty
           ? null
@@ -309,13 +345,18 @@ class Task {
 
   factory Task.fromMap(Map<String, Object?> map) {
     final wdStr = map['weekdays'] as String?;
+    final tagStr = map['tags'] as String?;
     return Task(
       id: map['id'] as int?,
       title: map['title'] as String,
       note: (map['note'] as String?) ?? '',
+      tags: (tagStr == null || tagStr.isEmpty)
+          ? <String>{}
+          : tagStr.split(',').toSet(),
       repeatType: RepeatType.fromCode(map['repeat_type'] as String),
       remindHour: map['remind_hour'] as int,
       remindMinute: map['remind_minute'] as int,
+      advanceMinutes: map['advance_minutes'] as int? ?? 0,
       date: map['date'] as String?,
       weekdays: (wdStr == null || wdStr.isEmpty)
           ? <int>{}

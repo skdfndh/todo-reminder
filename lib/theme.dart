@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'models/task.dart';
+import 'utils/motion.dart';
 
 /// 「暖纸手账」配色。
 class AppColors {
@@ -23,34 +24,65 @@ class AppColors {
 
 /// 重要性主色。
 Color priorityColor(Priority p) => switch (p) {
-      Priority.high => AppColors.high,
-      Priority.medium => AppColors.medium,
-      Priority.low => AppColors.low,
-    };
+  Priority.high => AppColors.high,
+  Priority.medium => AppColors.medium,
+  Priority.low => AppColors.low,
+};
 
 /// 重要性淡色底（框内涂色）。
 Color priorityTint(Priority p) => switch (p) {
-      Priority.high => AppColors.highTint,
-      Priority.medium => AppColors.mediumTint,
-      Priority.low => AppColors.lowTint,
-    };
+  Priority.high => AppColors.highTint,
+  Priority.medium => AppColors.mediumTint,
+  Priority.low => AppColors.lowTint,
+};
 
 ThemeData buildAppTheme() {
-  final scheme = ColorScheme.fromSeed(
-    seedColor: AppColors.ink,
-    brightness: Brightness.light,
-    surface: AppColors.surface,
-  ).copyWith(
-    primary: AppColors.ink,
-    onPrimary: AppColors.surface,
-    onSurface: AppColors.ink,
-    onSurfaceVariant: AppColors.muted,
-    outline: AppColors.line,
-    surface: AppColors.paper,
-  );
+  final scheme =
+      ColorScheme.fromSeed(
+        seedColor: AppColors.ink,
+        brightness: Brightness.light,
+        surface: AppColors.surface,
+      ).copyWith(
+        primary: AppColors.ink,
+        onPrimary: AppColors.surface,
+        onSurface: AppColors.ink,
+        onSurfaceVariant: AppColors.muted,
+        outline: AppColors.line,
+        surface: AppColors.paper,
+      );
   return ThemeData(
     useMaterial3: true,
     colorScheme: scheme,
     scaffoldBackgroundColor: AppColors.paper,
+    filledButtonTheme: FilledButtonThemeData(
+      style: ButtonStyle(
+        animationDuration: AppMotion.pressDuration,
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        ),
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: ButtonStyle(
+        animationDuration: AppMotion.pressDuration,
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      ),
+    ),
+  );
+}
+
+ThemeData buildDarkAppTheme() {
+  final scheme = ColorScheme.fromSeed(
+    seedColor: AppColors.high,
+    brightness: Brightness.dark,
+  ).copyWith(primary: AppColors.surface, surface: const Color(0xFF201E1A));
+  return ThemeData(
+    useMaterial3: true,
+    colorScheme: scheme,
+    filledButtonTheme: FilledButtonThemeData(
+      style: ButtonStyle(animationDuration: AppMotion.pressDuration),
+    ),
   );
 }

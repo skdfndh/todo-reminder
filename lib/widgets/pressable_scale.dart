@@ -1,16 +1,14 @@
 import 'package:flutter/material.dart';
 
-/// 按压时轻微缩放的反馈包装（emil 框架：scale 0.97，~140ms ease-out）。
+import '../utils/motion.dart';
+
+/// 按压时轻微缩放的反馈包装，避免让高频操作显得迟滞。
 ///
 /// 用 [Listener] 监听指针按下/抬起，可包裹任意已有可点击组件（IconButton、
 /// FilledButton、卡片等），不会与它们内置的 InkWell 水波纹冲突。
 /// 只动 transform（GPU 友好）；尊重系统「减少动画」设置。
 class PressableScale extends StatefulWidget {
-  const PressableScale({
-    super.key,
-    required this.child,
-    this.scale = 0.97,
-  });
+  const PressableScale({super.key, required this.child, this.scale = 0.97});
 
   final Widget child;
 
@@ -37,8 +35,8 @@ class _PressableScaleState extends State<PressableScale> {
       onPointerCancel: (_) => _set(false),
       child: AnimatedScale(
         scale: _pressed ? widget.scale : 1.0,
-        duration: reduce ? Duration.zero : const Duration(milliseconds: 140),
-        curve: Curves.easeOutCubic,
+        duration: reduce ? Duration.zero : AppMotion.pressDuration,
+        curve: AppMotion.easeOut,
         child: widget.child,
       ),
     );

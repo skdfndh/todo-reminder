@@ -20,21 +20,25 @@ Future<void> main() async {
   final tasks = await repo.getAll();
   await notif.rescheduleAll(tasks);
 
-  runApp(UncontrolledProviderScope(
-    container: container,
-    child: const TodoReminderApp(),
-  ));
+  runApp(
+    UncontrolledProviderScope(
+      container: container,
+      child: const TodoReminderApp(),
+    ),
+  );
 }
 
-class TodoReminderApp extends StatelessWidget {
+class TodoReminderApp extends ConsumerWidget {
   const TodoReminderApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return MaterialApp(
       title: '待办提醒',
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
+      darkTheme: buildDarkAppTheme(),
+      themeMode: ref.watch(themeModeProvider),
       home: const HomeScreen(),
     );
   }

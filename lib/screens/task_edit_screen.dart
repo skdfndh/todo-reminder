@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/task_repository.dart';
 import '../models/task.dart';
 import '../providers/task_providers.dart';
 import '../theme.dart';
@@ -9,9 +10,10 @@ import '../widgets/pressable_scale.dart';
 const _weekdayNames = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 
 class TaskEditScreen extends ConsumerStatefulWidget {
-  const TaskEditScreen({super.key, this.task});
+  const TaskEditScreen({super.key, this.task, this.initialDate});
 
   final Task? task;
+  final DateTime? initialDate;
 
   @override
   ConsumerState<TaskEditScreen> createState() => _TaskEditScreenState();
@@ -20,6 +22,7 @@ class TaskEditScreen extends ConsumerStatefulWidget {
 class _TaskEditScreenState extends ConsumerState<TaskEditScreen> {
   late final TextEditingController _titleCtrl;
   late final TextEditingController _noteCtrl;
+  late final TextEditingController _tagsCtrl;
 
   late RepeatType _repeatType;
   late TimeOfDay _time;
@@ -31,6 +34,7 @@ class _TaskEditScreenState extends ConsumerState<TaskEditScreen> {
   DateTime? _startDate;
   DateTime? _endDate;
   bool _enabled = true;
+  int _advanceMinutes = 0;
 
   bool get _isEditing => widget.task != null;
   bool get _isRecurring => _repeatType != RepeatType.once;
@@ -41,9 +45,12 @@ class _TaskEditScreenState extends ConsumerState<TaskEditScreen> {
     final t = widget.task;
     _titleCtrl = TextEditingController(text: t?.title ?? '');
     _noteCtrl = TextEditingController(text: t?.note ?? '');
+    _tagsCtrl = TextEditingController(text: t?.tags.join(',') ?? '');
     _repeatType = t?.repeatType ?? RepeatType.once;
     _time = TimeOfDay(hour: t?.remindHour ?? 9, minute: t?.remindMinute ?? 0);
-    _date = t?.date != null ? DateTime.parse(t!.date!) : DateTime.now();
+    _date = t?.date != null
+        ? DateTime.parse(t!.date!)
+        : widget.initialDate ?? DateTime.now();
     _weekdays.addAll(t?.weekdays ?? const {1, 2, 3, 4, 5});
     _dayOfMonth = t?.dayOfMonth ?? 1;
     _priority = t?.priority ?? Priority.medium;
@@ -51,12 +58,14 @@ class _TaskEditScreenState extends ConsumerState<TaskEditScreen> {
     _startDate = t?.startDate != null ? DateTime.parse(t!.startDate!) : null;
     _endDate = t?.endDate != null ? DateTime.parse(t!.endDate!) : null;
     _enabled = t?.enabled ?? true;
+    _advanceMinutes = t?.advanceMinutes ?? 0;
   }
 
   @override
   void dispose() {
     _titleCtrl.dispose();
     _noteCtrl.dispose();
+    _tagsCtrl.dispose();
     super.dispose();
   }
 
@@ -78,8 +87,7 @@ class _TaskEditScreenState extends ConsumerState<TaskEditScreen> {
   String _formatDate(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
-  String _displayDate(DateTime d) =>
-      '${d.month}月${d.day}日';
+  String _displayDate(DateTime d) => '${d.month}月${d.day}日';
 
   Future<void> _save() async {
     final title = _titleCtrl.text.trim();
@@ -103,9 +111,15 @@ class _TaskEditScreenState extends ConsumerState<TaskEditScreen> {
       id: original?.id,
       title: title,
       note: _noteCtrl.text.trim(),
+      tags: _tagsCtrl.text
+          .split(',')
+          .map((tag) => tag.trim())
+          .where((tag) => tag.isNotEmpty)
+          .toSet(),
       repeatType: _repeatType,
       remindHour: _time.hour,
       remindMinute: _time.minute,
+      advanceMinutes: _advanceMinutes,
       date: _repeatType == RepeatType.once ? _formatDate(_date!) : null,
       weekdays: _repeatType == RepeatType.weekly ? Set.of(_weekdays) : const {},
       dayOfMonth: _repeatType == RepeatType.monthly ? _dayOfMonth : null,
@@ -134,8 +148,33 @@ class _TaskEditScreenState extends ConsumerState<TaskEditScreen> {
   }
 
   void _toast(String msg) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(msg)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  Future<void> _saveQuickTask() async {
+    final title = _titleCtrl.text.trim();
+    if (title.isEmpty) {
+      _toast('请先输入事项标题');
+      return;
+    }
+    await ref
+        .read(taskRepositoryProvider)
+        .insertQuickTask(
+          QuickTask(
+            title: title,
+            note: _noteCtrl.text.trim(),
+            remindHour: _time.hour,
+            remindMinute: _time.minute,
+            priority: _priority,
+            tags: _tagsCtrl.text
+                .split(',')
+                .map((tag) => tag.trim())
+                .where((tag) => tag.isNotEmpty)
+                .toSet(),
+            advanceMinutes: _advanceMinutes,
+          ),
+        );
+    if (mounted) _toast('已存为常用任务');
   }
 
   @override
@@ -147,6 +186,14 @@ class _TaskEditScreenState extends ConsumerState<TaskEditScreen> {
         backgroundColor: AppColors.paper,
         foregroundColor: AppColors.ink,
         elevation: 0,
+        actions: [
+          if (!_isEditing)
+            IconButton(
+              tooltip: '存为常用任务',
+              icon: const Icon(Icons.bookmark_add_outlined),
+              onPressed: _saveQuickTask,
+            ),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -165,6 +212,14 @@ class _TaskEditScreenState extends ConsumerState<TaskEditScreen> {
             maxLines: 2,
             decoration: const InputDecoration(
               labelText: '备注（可选）',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _tagsCtrl,
+            decoration: const InputDecoration(
+              labelText: '标签（用逗号分隔）',
               border: OutlineInputBorder(),
             ),
           ),
@@ -192,6 +247,26 @@ class _TaskEditScreenState extends ConsumerState<TaskEditScreen> {
               style: theme.textTheme.titleMedium,
             ),
             onTap: _pickTime,
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.notifications_active_outlined),
+            title: const Text('提前提醒'),
+            trailing: DropdownButton<int>(
+              value: _advanceMinutes,
+              underline: const SizedBox(),
+              items: const [0, 5, 10, 15, 30, 60]
+                  .map(
+                    (minutes) => DropdownMenuItem(
+                      value: minutes,
+                      child: Text(minutes == 0 ? '准时' : '提前 $minutes 分钟'),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (minutes) {
+                if (minutes != null) setState(() => _advanceMinutes = minutes);
+              },
+            ),
           ),
           if (_repeatType == RepeatType.once)
             ListTile(

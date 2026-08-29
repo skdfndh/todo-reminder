@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/task.dart';
 import '../theme.dart';
+import '../utils/motion.dart';
 import 'pressable_scale.dart';
 
 /// 单条待办卡片：按重要性涂色，支持打勾、置顶、删除。
@@ -14,6 +15,7 @@ class TaskTile extends StatelessWidget {
     required this.onTogglePin,
     required this.onDelete,
     this.done,
+    this.canToggle = true,
   });
 
   final Task task;
@@ -24,13 +26,15 @@ class TaskTile extends StatelessWidget {
 
   /// 打勾显示状态；不传则用 task.doneToday（按天视图下由调用方传入视图日的完成态）。
   final bool? done;
+  final bool canToggle;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final now = DateTime.now();
     final next = task.nextOccurrence(now);
-    final overdue = task.repeatType == RepeatType.once &&
+    final overdue =
+        task.repeatType == RepeatType.once &&
         next != null &&
         next.isBefore(now);
 
@@ -49,7 +53,9 @@ class TaskTile extends StatelessWidget {
     ];
     final subtitle = subtitleParts.join(' · ');
 
-    final titleColor = done ? theme.colorScheme.onSurfaceVariant : AppColors.ink;
+    final titleColor = done
+        ? theme.colorScheme.onSurfaceVariant
+        : AppColors.ink;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -75,7 +81,11 @@ class TaskTile extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(12, 12, 4, 12),
         child: Row(
           children: [
-            _CheckCircle(done: done, color: color, onTap: onToggleDone),
+            _CheckCircle(
+              done: done,
+              color: color,
+              onTap: canToggle ? onToggleDone : null,
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: PressableScale(
@@ -99,8 +109,9 @@ class TaskTile extends StatelessWidget {
                               style: theme.textTheme.titleMedium?.copyWith(
                                 color: titleColor,
                                 fontWeight: FontWeight.w600,
-                                decoration:
-                                    done ? TextDecoration.lineThrough : null,
+                                decoration: done
+                                    ? TextDecoration.lineThrough
+                                    : null,
                               ),
                             ),
                           ),
@@ -117,6 +128,17 @@ class TaskTile extends StatelessWidget {
                           ),
                         ),
                       ],
+                      if (task.tags.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          task.tags.map((tag) => '#$tag').join('  '),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: color,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -128,7 +150,9 @@ class TaskTile extends StatelessWidget {
                 icon: Icon(
                   task.pinned ? Icons.push_pin : Icons.push_pin_outlined,
                   size: 20,
-                  color: task.pinned ? color : theme.colorScheme.onSurfaceVariant,
+                  color: task.pinned
+                      ? color
+                      : theme.colorScheme.onSurfaceVariant,
                 ),
                 onPressed: onTogglePin,
               ),
@@ -160,7 +184,7 @@ class _CheckCircle extends StatelessWidget {
 
   final bool done;
   final Color color;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -170,29 +194,23 @@ class _CheckCircle extends StatelessWidget {
       child: GestureDetector(
         onTap: onTap,
         child: AnimatedContainer(
-          duration:
-              reduce ? Duration.zero : const Duration(milliseconds: 160),
+          duration: reduce ? Duration.zero : AppMotion.stateDuration,
           width: 26,
           height: 26,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: done ? color : Colors.transparent,
-            border: Border.all(
-              color: done ? color : AppColors.muted,
-              width: 2,
-            ),
+            border: Border.all(color: done ? color : AppColors.muted, width: 2),
           ),
           // 勾号从轻微缩小 + 淡入，状态切换不突兀（打勾是高频，保持快速）。
           child: AnimatedScale(
             scale: done ? 1.0 : 0.7,
-            duration:
-                reduce ? Duration.zero : const Duration(milliseconds: 150),
-            curve: Curves.easeOutCubic,
+            duration: reduce ? Duration.zero : AppMotion.stateDuration,
+            curve: AppMotion.easeOut,
             child: AnimatedOpacity(
               opacity: done ? 1.0 : 0.0,
-              duration:
-                  reduce ? Duration.zero : const Duration(milliseconds: 150),
-              curve: Curves.easeOut,
+              duration: reduce ? Duration.zero : AppMotion.stateDuration,
+              curve: AppMotion.easeOut,
               child: const Icon(Icons.check, size: 16, color: Colors.white),
             ),
           ),

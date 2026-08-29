@@ -1,9 +1,11 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/database.dart';
 import '../data/task_repository.dart';
 import '../models/task.dart';
 import '../services/notification_service.dart';
+import '../services/backup_service.dart';
 import '../services/update_service.dart';
 
 /// 列表排序方式。
@@ -28,13 +30,19 @@ final updateServiceProvider = Provider<UpdateService>((ref) {
   return UpdateService();
 });
 
+final backupServiceProvider = Provider<BackupService>((ref) {
+  return BackupService(ref.read(taskRepositoryProvider));
+});
+
 final sortModeProvider = StateProvider<SortMode>((ref) => SortMode.time);
 
 /// 是否把已完成的待办自动排在未完成下面。
 final doneLastProvider = StateProvider<bool>((ref) => false);
+final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.system);
 
-final tasksProvider =
-    AsyncNotifierProvider<TasksNotifier, List<Task>>(TasksNotifier.new);
+final tasksProvider = AsyncNotifierProvider<TasksNotifier, List<Task>>(
+  TasksNotifier.new,
+);
 
 String dateKey(DateTime d) =>
     '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
@@ -43,15 +51,20 @@ String dateKey(DateTime d) =>
 ///
 /// [viewDay] 为按天视图当前查看的日期：已完成分组按该日期的完成态判断
 /// （非今天查看重复任务时它们都未完成，不参与分组）。
-List<Task> sortTasks(List<Task> tasks, SortMode mode,
-    {bool doneLast = false, DateTime? viewDay}) {
+List<Task> sortTasks(
+  List<Task> tasks,
+  SortMode mode, {
+  bool doneLast = false,
+  DateTime? viewDay,
+}) {
   final now = DateTime.now();
   int cmp(Task a, Task b) {
     if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
     // 开关开启时，已完成的统一排到未完成下面（置顶仍最前）。
     if (doneLast) {
-      final da = viewDay == null ? a.doneToday : a.isDoneOn(viewDay);
-      final db = viewDay == null ? b.doneToday : b.isDoneOn(viewDay);
+      final day = viewDay ?? now;
+      final da = a.isDoneOn(day);
+      final db = b.isDoneOn(day);
       if (da != db) return da ? 1 : -1;
     }
     if (mode == SortMode.importance && a.priority.value != b.priority.value) {
@@ -76,24 +89,26 @@ class TasksNotifier extends AsyncNotifier<List<Task>> {
   @override
   Future<List<Task>> build() async {
     final tasks = await _repo.getAll();
-    // 跨天复位：重复任务昨天打勾的，今天自动复位（保留累计次数）。
-    final today = dateKey(DateTime.now());
-    var changed = false;
-    final normalized = <Task>[];
-    for (final t in tasks) {
-      if (t.repeatType != RepeatType.once && t.doneToday && t.doneDate != today) {
-        changed = true;
-        normalized.add(t.copyWith(doneToday: false, doneDate: null));
-      } else {
-        normalized.add(t);
-      }
+    final mode = await _repo.setting('sort_mode');
+    final doneLast = await _repo.setting('done_last');
+    final theme = await _repo.setting('theme_mode');
+    if (mode != null) {
+      ref
+          .read(sortModeProvider.notifier)
+          .state = mode == SortMode.importance.name
+          ? SortMode.importance
+          : SortMode.time;
     }
-    if (changed) {
-      for (final t in normalized) {
-        await _repo.update(t);
-      }
+    if (doneLast != null) {
+      ref.read(doneLastProvider.notifier).state = doneLast == 'true';
     }
-    return normalized;
+    if (theme != null) {
+      ref.read(themeModeProvider.notifier).state = ThemeMode.values.firstWhere(
+        (item) => item.name == theme,
+        orElse: () => ThemeMode.system,
+      );
+    }
+    return tasks;
   }
 
   Future<void> _refresh() async {
@@ -126,23 +141,29 @@ class TasksNotifier extends AsyncNotifier<List<Task>> {
     await _refresh();
   }
 
-  Future<void> toggleDone(Task task) async {
+  Future<void> toggleDone(Task task, DateTime viewDay) async {
     final now = DateTime.now();
-    final today = dateKey(now);
-    final done = !task.doneToday;
+    final today = DateTime(now.year, now.month, now.day);
+    final day = DateTime(viewDay.year, viewDay.month, viewDay.day);
+    if (day.isAfter(today) || task.id == null) return;
+    final done = !task.isDoneOn(day);
     var count = task.doneCount;
-    if (done && !task.doneToday) count += 1;
-    if (!done && task.doneToday) count = count > 0 ? count - 1 : 0;
+    if (task.statisticsEnabled) count += done ? 1 : -1;
+    if (count < 0) count = 0;
+    final doneToday = day == today ? done : task.isDoneOn(today);
 
-    final saved = await _repo.update(task.copyWith(
-      doneToday: done,
-      doneDate: done ? today : null,
-      doneCount: count,
-      updatedAt: now.millisecondsSinceEpoch,
-    ));
+    await _repo.setCompleted(task.id!, Task.dateKey(day), done);
+    final saved = await _repo.update(
+      task.copyWith(
+        doneToday: doneToday,
+        doneDate: doneToday ? Task.dateKey(today) : null,
+        doneCount: count,
+        updatedAt: now.millisecondsSinceEpoch,
+      ),
+    );
 
-    // 一次性任务完成/取消完成时同步提醒。
-    if (task.repeatType == RepeatType.once) {
+    // 一次性任务在任务当天完成/取消完成时同步提醒。
+    if (task.repeatType == RepeatType.once && day == today) {
       if (done) {
         await _notif.cancelTaskById(task.id);
       } else if (saved.enabled) {
@@ -153,24 +174,17 @@ class TasksNotifier extends AsyncNotifier<List<Task>> {
   }
 
   Future<void> togglePin(Task task) async {
-    await _repo.update(task.copyWith(
-      pinned: !task.pinned,
-      updatedAt: DateTime.now().millisecondsSinceEpoch,
-    ));
+    await _repo.update(
+      task.copyWith(
+        pinned: !task.pinned,
+        updatedAt: DateTime.now().millisecondsSinceEpoch,
+      ),
+    );
     await _refresh();
   }
 
-  /// 午夜跨天：复位当天打勾、重排通知、刷新列表。
+  /// 午夜跨天：重排通知、刷新列表。
   Future<void> rollover() async {
-    final tasks = await _repo.getAll();
-    final today = dateKey(DateTime.now());
-    for (final t in tasks) {
-      if (t.repeatType != RepeatType.once &&
-          t.doneToday &&
-          t.doneDate != today) {
-        await _repo.update(t.copyWith(doneToday: false, doneDate: null));
-      }
-    }
     final fresh = await _repo.getAll();
     await _notif.rescheduleAll(fresh);
     state = AsyncData(fresh);

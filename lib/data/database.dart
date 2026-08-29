@@ -19,7 +19,7 @@ class AppDatabase {
     final path = p.join(dir, 'todo_reminder.db');
     return openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -27,25 +27,67 @@ class AppDatabase {
 
   Future<void> _onCreate(Database db, int version) async {
     await db.execute(_createTable);
+    await _createAuxiliaryTables(db);
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       // v1 -> v2：为已有表新增列（保留旧数据）。
       await db.execute(
-          'ALTER TABLE tasks ADD COLUMN priority INTEGER NOT NULL DEFAULT 1');
+        'ALTER TABLE tasks ADD COLUMN priority INTEGER NOT NULL DEFAULT 1',
+      );
       await db.execute(
-          'ALTER TABLE tasks ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0');
+        'ALTER TABLE tasks ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0',
+      );
       await db.execute(
-          'ALTER TABLE tasks ADD COLUMN statistics_enabled INTEGER NOT NULL DEFAULT 0');
+        'ALTER TABLE tasks ADD COLUMN statistics_enabled INTEGER NOT NULL DEFAULT 0',
+      );
       await db.execute('ALTER TABLE tasks ADD COLUMN start_date TEXT');
       await db.execute('ALTER TABLE tasks ADD COLUMN end_date TEXT');
       await db.execute(
-          'ALTER TABLE tasks ADD COLUMN done_today INTEGER NOT NULL DEFAULT 0');
+        'ALTER TABLE tasks ADD COLUMN done_today INTEGER NOT NULL DEFAULT 0',
+      );
       await db.execute('ALTER TABLE tasks ADD COLUMN done_date TEXT');
       await db.execute(
-          'ALTER TABLE tasks ADD COLUMN done_count INTEGER NOT NULL DEFAULT 0');
+        'ALTER TABLE tasks ADD COLUMN done_count INTEGER NOT NULL DEFAULT 0',
+      );
     }
+    if (oldVersion < 3) {
+      await db.execute('ALTER TABLE tasks ADD COLUMN tags TEXT');
+      await db.execute(
+        'ALTER TABLE tasks ADD COLUMN advance_minutes INTEGER NOT NULL DEFAULT 0',
+      );
+      await _createAuxiliaryTables(db);
+    }
+  }
+
+  Future<void> _createAuxiliaryTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS task_completions (
+        task_id INTEGER NOT NULL,
+        date TEXT NOT NULL,
+        PRIMARY KEY (task_id, date),
+        FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS quick_tasks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        note TEXT NOT NULL DEFAULT '',
+        remind_hour INTEGER NOT NULL DEFAULT 9,
+        remind_minute INTEGER NOT NULL DEFAULT 0,
+        priority INTEGER NOT NULL DEFAULT 1,
+        tags TEXT,
+        advance_minutes INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
   }
 
   static const _createTable = '''
@@ -53,9 +95,11 @@ class AppDatabase {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       title TEXT NOT NULL,
       note TEXT NOT NULL DEFAULT '',
+      tags TEXT,
       repeat_type TEXT NOT NULL,
       remind_hour INTEGER NOT NULL,
       remind_minute INTEGER NOT NULL,
+      advance_minutes INTEGER NOT NULL DEFAULT 0,
       date TEXT,
       weekdays TEXT,
       day_of_month INTEGER,

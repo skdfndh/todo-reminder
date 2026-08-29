@@ -13,9 +13,11 @@ import '../models/task.dart' hide Priority;
 /// - weekly 每个星期几拆成一条独立通知，ID 用 `id * 100 + weekday`（weekday 1-7）。
 /// 取消时统一取消这 8 个候选 ID，避免类型切换后残留旧通知。
 class NotificationService {
-  final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin _plugin =
+      FlutterLocalNotificationsPlugin();
 
   bool _initialized = false;
+  final ValueNotifier<int?> openedTaskId = ValueNotifier<int?>(null);
 
   static const _channelId = 'task_reminders';
   static const _channelName = '待办提醒';
@@ -35,7 +37,23 @@ class NotificationService {
       android: AndroidInitializationSettings('@mipmap/ic_launcher'),
       iOS: DarwinInitializationSettings(),
     );
-    await _plugin.initialize(settings: settings);
+    await _plugin.initialize(
+      settings: settings,
+      onDidReceiveNotificationResponse: (response) {
+        final id = int.tryParse(response.payload ?? '');
+        if (response.actionId == 'snooze_10') {
+          _snooze(id);
+        } else {
+          openedTaskId.value = id;
+        }
+      },
+    );
+    final launch = await _plugin.getNotificationAppLaunchDetails();
+    if (launch?.didNotificationLaunchApp ?? false) {
+      openedTaskId.value = int.tryParse(
+        launch?.notificationResponse?.payload ?? '',
+      );
+    }
     _initialized = true;
   }
 
@@ -45,13 +63,15 @@ class NotificationService {
     if (defaultTargetPlatform == TargetPlatform.android) {
       final android = _plugin
           .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>();
+            AndroidFlutterLocalNotificationsPlugin
+          >();
       await android?.requestNotificationsPermission();
       await android?.requestExactAlarmsPermission();
     } else if (defaultTargetPlatform == TargetPlatform.iOS) {
       final ios = _plugin
           .resolvePlatformSpecificImplementation<
-              IOSFlutterLocalNotificationsPlugin>();
+            IOSFlutterLocalNotificationsPlugin
+          >();
       await ios?.requestPermissions(alert: true, badge: true, sound: true);
     }
   }
@@ -60,7 +80,8 @@ class NotificationService {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return false;
     final android = _plugin
         .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>();
+          AndroidFlutterLocalNotificationsPlugin
+        >();
     return await android?.canScheduleExactNotifications() ?? false;
   }
 
@@ -80,6 +101,7 @@ class NotificationService {
         importance: Importance.max,
         priority: Priority.high,
         icon: '@mipmap/ic_launcher',
+        actions: const [AndroidNotificationAction('snooze_10', '10分钟后提醒')],
       ),
       iOS: const DarwinNotificationDetails(),
     );
@@ -93,20 +115,42 @@ class NotificationService {
     final body = task.title;
     final match = _matchFor(task.repeatType);
 
-    for (final occ in task.nextOccurrences(now)) {
+    final from = now.add(Duration(minutes: task.advanceMinutes));
+    for (final occ in task.nextOccurrences(from)) {
       // 只调度未来时刻（一次性任务若已过期则跳过）。
-      if (!occ.time.isAfter(now)) continue;
+      final scheduled = occ.time.subtract(
+        Duration(minutes: task.advanceMinutes),
+      );
+      if (!scheduled.isAfter(now)) continue;
       final notifId = occ.weekday == 0 ? id : _weeklyId(id, occ.weekday);
       await _plugin.zonedSchedule(
         id: notifId,
         title: _channelName,
-        body: body,
-        scheduledDate: tz.TZDateTime.from(occ.time, tz.local),
+        body: task.advanceMinutes == 0 ? body : '$body（${task.timeLabel}）',
+        scheduledDate: tz.TZDateTime.from(scheduled, tz.local),
         notificationDetails: details,
         androidScheduleMode: mode,
         matchDateTimeComponents: match,
+        payload: '$id',
       );
     }
+  }
+
+  Future<void> _snooze(int? taskId) async {
+    if (taskId == null) return;
+    await init();
+    final time = tz.TZDateTime.now(tz.local).add(const Duration(minutes: 10));
+    await _plugin.zonedSchedule(
+      id: taskId * 1000 + 99,
+      title: _channelName,
+      body: '稍后提醒',
+      scheduledDate: time,
+      notificationDetails: const NotificationDetails(
+        android: AndroidNotificationDetails(_channelId, _channelName),
+      ),
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      payload: '$taskId',
+    );
   }
 
   DateTimeComponents _matchFor(RepeatType type) {

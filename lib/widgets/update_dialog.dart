@@ -6,12 +6,16 @@ import 'package:path_provider/path_provider.dart';
 import '../providers/task_providers.dart';
 import '../services/update_service.dart';
 import '../theme.dart';
+import '../utils/motion.dart';
 
 /// 同会话只检查一次，避免反复打扰。
 bool _checking = false;
 
 /// 启动后检查更新并弹窗引导。无新版本 / 网络异常一律静默。
-Future<void> checkForUpdatesAndPrompt(BuildContext context, WidgetRef ref) async {
+Future<void> checkForUpdatesAndPrompt(
+  BuildContext context,
+  WidgetRef ref,
+) async {
   if (_checking) return;
   _checking = true;
 
@@ -27,10 +31,14 @@ Future<void> checkForUpdatesAndPrompt(BuildContext context, WidgetRef ref) async
 }
 
 /// 「发现新版本」确认弹窗：新旧版本号、更新内容，并提醒先打开网络代理。
-Future<bool?> _confirmVersionDialog(BuildContext context,
-    UpdateCheckResult result, String? currentVersion) {
+Future<bool?> _confirmVersionDialog(
+  BuildContext context,
+  UpdateCheckResult result,
+  String? currentVersion,
+) {
   return showDialog<bool>(
     context: context,
+    animationStyle: AppMotion.sheetStyle,
     builder: (ctx) {
       final theme = Theme.of(ctx);
       final notes = result.releaseNotes.trim();
@@ -65,8 +73,9 @@ Future<bool?> _confirmVersionDialog(BuildContext context,
                 child: SingleChildScrollView(
                   child: Text(
                     notes,
-                    style: theme.textTheme.bodySmall
-                        ?.copyWith(color: AppColors.muted),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: AppColors.muted,
+                    ),
                   ),
                 ),
               ),
@@ -75,9 +84,7 @@ Future<bool?> _confirmVersionDialog(BuildContext context,
             // 下载来源提示：GitHub 需要网络代理。
             Text(
               '提示：更新包托管在 GitHub，请先打开网络代理（梯子）再点击「立即更新」，以免下载失败。',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: AppColors.high,
-              ),
+              style: theme.textTheme.bodySmall?.copyWith(color: AppColors.high),
             ),
           ],
         ),
@@ -97,8 +104,11 @@ Future<bool?> _confirmVersionDialog(BuildContext context,
 }
 
 /// 下载 APK 到缓存目录，展示进度，完成后唤起系统安装器。
-Future<void> _downloadAndInstall(BuildContext context, UpdateService service,
-    UpdateCheckResult result) async {
+Future<void> _downloadAndInstall(
+  BuildContext context,
+  UpdateService service,
+  UpdateCheckResult result,
+) async {
   final dir = await getTemporaryDirectory();
   if (!context.mounted) return;
   final dest = '${dir.path}/todo-reminder-${result.latestVersion}.apk';
@@ -110,6 +120,7 @@ Future<void> _downloadAndInstall(BuildContext context, UpdateService service,
 
   final dialogFuture = showDialog<void>(
     context: context,
+    animationStyle: AppMotion.sheetStyle,
     barrierDismissible: false,
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setState) {
@@ -133,8 +144,10 @@ Future<void> _downloadAndInstall(BuildContext context, UpdateService service,
               ),
               if (failed) ...[
                 const SizedBox(height: 8),
-                Text('下载失败，请稍后重试',
-                    style: const TextStyle(color: AppColors.high)),
+                Text(
+                  '下载失败，请稍后重试',
+                  style: const TextStyle(color: AppColors.high),
+                ),
               ],
             ],
           ),
@@ -168,8 +181,10 @@ Future<void> _downloadAndInstall(BuildContext context, UpdateService service,
 
   if (failed || !context.mounted) return;
 
-  final opened =
-      await OpenFilex.open(dest, type: 'application/vnd.android.package-archive');
+  final opened = await OpenFilex.open(
+    dest,
+    type: 'application/vnd.android.package-archive',
+  );
   if (opened.type != ResultType.done) {
     debugPrint('唤起安装器失败：${opened.type} / ${opened.message}');
     if (context.mounted) _showInstallGuide(context);
@@ -180,6 +195,7 @@ Future<void> _downloadAndInstall(BuildContext context, UpdateService service,
 void _showInstallGuide(BuildContext context) {
   showDialog<void>(
     context: context,
+    animationStyle: AppMotion.sheetStyle,
     builder: (ctx) => AlertDialog(
       title: const Text('安装未完成'),
       content: const Text('请到系统设置里给本应用开启「允许安装未知应用」，再重新打开 App 完成更新。'),

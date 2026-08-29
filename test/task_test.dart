@@ -62,14 +62,16 @@ void main() {
       expect(t.isActiveOn(DateTime(2026, 8, 15)), isTrue);
       expect(t.isActiveOn(DateTime(2026, 8, 16)), isFalse);
     });
+
+    test('每月 31 号在二月按最后一天生效', () {
+      final t = _task(repeatType: RepeatType.monthly, dayOfMonth: 31);
+      expect(t.isActiveOn(DateTime(2026, 2, 28)), isTrue);
+    });
   });
 
   group('nextOccurrence 时间窗口', () {
     test('已过结束日期返回 null', () {
-      final t = _task(
-        repeatType: RepeatType.daily,
-        endDate: '2026-08-24',
-      );
+      final t = _task(repeatType: RepeatType.daily, endDate: '2026-08-24');
       expect(t.nextOccurrence(DateTime(2026, 8, 25, 8, 0)), isNull);
     });
 
@@ -89,20 +91,18 @@ void main() {
   });
 
   group('isDoneOn', () {
-    test('一次性任务完成态与查看日期无关', () {
-      final t = _task(date: '2026-08-30').copyWith(doneToday: true);
+    test('完成态只显示在打勾当天', () {
+      final t = _task(date: '2026-08-30')
+          .copyWith(completedDates: {'2026-08-30'});
       expect(t.isDoneOn(DateTime(2026, 8, 30)), isTrue);
-      expect(t.isDoneOn(DateTime(2026, 8, 31)), isTrue);
+      expect(t.isDoneOn(DateTime(2026, 8, 31)), isFalse);
     });
 
-    test('重复任务只在今天显示已完成，翻到其他日期为未完成', () {
-      final done =
-          _task(repeatType: RepeatType.daily).copyWith(doneToday: true);
-      expect(done.isDoneOn(DateTime.now()), isTrue);
-      expect(
-        done.isDoneOn(DateTime.now().add(const Duration(days: 1))),
-        isFalse,
-      );
+    test('重复任务只在打勾当天显示已完成', () {
+      final done = _task(repeatType: RepeatType.daily)
+          .copyWith(completedDates: {'2026-08-30'});
+      expect(done.isDoneOn(DateTime(2026, 8, 30)), isTrue);
+      expect(done.isDoneOn(DateTime(2026, 8, 31)), isFalse);
       final pending = _task(repeatType: RepeatType.daily);
       expect(pending.isDoneOn(DateTime.now()), isFalse);
     });
@@ -112,7 +112,11 @@ void main() {
     test('置顶优先；重要性模式高在前，时间模式按时间', () {
       final low = _task(date: '2027-01-01', priority: Priority.low);
       final high = _task(date: '2027-01-02', priority: Priority.high);
-      final pinned = _task(date: '2027-01-03', priority: Priority.low, pinned: true);
+      final pinned = _task(
+        date: '2027-01-03',
+        priority: Priority.low,
+        pinned: true,
+      );
 
       final byTime = sortTasks([low, high, pinned], SortMode.time);
       expect(byTime.map((e) => e.title).toList().length, 3);
@@ -129,32 +133,41 @@ void main() {
     });
 
     test('doneLast 开启时已完成的排在未完成下面', () {
-      final done = _task(date: '2027-01-01').copyWith(doneToday: true);
+      final today = DateTime.now();
+      final done = _task(date: '2027-01-01')
+          .copyWith(completedDates: {Task.dateKey(today)});
       final pending = _task(date: '2027-01-02');
 
       // 开关关闭：按时间，已完成（01-01）在前
       final off = sortTasks([done, pending], SortMode.time);
-      expect(off.map((e) => e.doneToday).toList(), [true, false]);
+      expect(off.first, done);
 
       // 开关开启：未完成排前
       final on = sortTasks([done, pending], SortMode.time, doneLast: true);
-      expect(on.map((e) => e.doneToday).toList(), [false, true]);
+      expect(on.first, pending);
     });
 
     test('doneLast 在非今天视图不把重复任务当已完成', () {
-      final done = _task(repeatType: RepeatType.daily, hour: 9, minute: 0)
-          .copyWith(doneToday: true);
+      final done = _task(
+        repeatType: RepeatType.daily,
+        hour: 9,
+        minute: 0,
+      ).copyWith(completedDates: {Task.dateKey(DateTime.now())});
       final pending = _task(repeatType: RepeatType.daily, hour: 10, minute: 0);
       final tomorrow = DateTime.now().add(const Duration(days: 1));
 
       // 明天视图：重复任务都不算已完成，按时间排（09:00 在前）。
-      final byDay = sortTasks([pending, done], SortMode.time,
-          doneLast: true, viewDay: tomorrow);
-      expect(byDay.first.doneToday, isTrue);
+      final byDay = sortTasks(
+        [pending, done],
+        SortMode.time,
+        doneLast: true,
+        viewDay: tomorrow,
+      );
+      expect(byDay.first, done);
 
       // 不传视图日（默认按 doneToday）：已完成的排后。
       final byDone = sortTasks([pending, done], SortMode.time, doneLast: true);
-      expect(byDone.first.doneToday, isFalse);
+      expect(byDone.first, pending);
     });
   });
 }
