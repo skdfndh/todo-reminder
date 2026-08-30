@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:open_filex/open_filex.dart';
 
 import '../providers/task_providers.dart';
+import '../services/cache_service.dart';
 import '../theme.dart';
 import '../utils/motion.dart';
 import '../widgets/update_dialog.dart';
@@ -17,6 +18,44 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _checkingUpdate = false;
+  late Future<CacheInfo> _cacheInfo;
+
+  @override
+  void initState() {
+    super.initState();
+    _cacheInfo = ref.read(cacheServiceProvider).inspect();
+  }
+
+  Future<void> _clearCache(CacheInfo info) async {
+    if (info.fileCount == 0) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      animationStyle: AppMotion.sheetStyle,
+      builder: (ctx) => AlertDialog(
+        title: const Text('清除缓存'),
+        content: Text(
+          '将删除 ${formatCacheSize(info.bytes)} 的已下载更新安装包。待办、统计、备份和设置会保留。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('清除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final cleared = await ref.read(cacheServiceProvider).clear();
+    if (!mounted) return;
+    setState(() => _cacheInfo = ref.read(cacheServiceProvider).inspect());
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('已清除 ${formatCacheSize(cleared.bytes)} 缓存')),
+    );
+  }
 
   Future<void> _checkForUpdate() async {
     setState(() => _checkingUpdate = true);
@@ -136,6 +175,37 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             trailing: const Icon(Icons.chevron_right),
             enabled: !_checkingUpdate,
             onTap: _checkingUpdate ? null : _checkForUpdate,
+          ),
+          const SizedBox(height: 24),
+          Text('存储空间', style: Theme.of(context).textTheme.titleMedium),
+          FutureBuilder<CacheInfo>(
+            future: _cacheInfo,
+            builder: (context, snapshot) {
+              final info = snapshot.data;
+              final loading = snapshot.connectionState != ConnectionState.done;
+              final subtitle = loading
+                  ? '正在计算可清除的数据量'
+                  : info == null || info.fileCount == 0
+                  ? '没有可清除的更新缓存'
+                  : '可清除 ${formatCacheSize(info.bytes)} · ${info.fileCount} 个已下载更新包';
+              return ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.delete_sweep_outlined),
+                title: const Text('清除缓存'),
+                subtitle: Text(subtitle),
+                trailing: loading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.chevron_right),
+                enabled: info != null && info.fileCount > 0,
+              onTap: info != null && info.fileCount > 0
+                  ? () => _clearCache(info)
+                  : null,
+              );
+            },
           ),
           const SizedBox(height: 24),
           Text('数据备份', style: Theme.of(context).textTheme.titleMedium),

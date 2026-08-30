@@ -6,6 +6,7 @@ import '../data/task_repository.dart';
 import '../models/task.dart';
 import '../services/notification_service.dart';
 import '../services/backup_service.dart';
+import '../services/cache_service.dart';
 import '../services/update_service.dart';
 
 /// 列表排序方式。
@@ -33,6 +34,8 @@ final updateServiceProvider = Provider<UpdateService>((ref) {
 final backupServiceProvider = Provider<BackupService>((ref) {
   return BackupService(ref.read(taskRepositoryProvider));
 });
+
+final cacheServiceProvider = Provider<CacheService>((ref) => CacheService());
 
 final sortModeProvider = StateProvider<SortMode>((ref) => SortMode.time);
 

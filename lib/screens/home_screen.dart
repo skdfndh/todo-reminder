@@ -33,6 +33,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   late final PageController _pageController;
   final TextEditingController _searchCtrl = TextEditingController();
   String _query = '';
+  bool _calendarVisible = false;
   late final NotificationService _notificationService;
   Timer? _timer;
 
@@ -274,10 +275,35 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           ),
                         ),
                       ),
-                      _MonthCalendar(
-                        selected: day,
-                        tasks: tasks,
-                        onSelect: _selectDay,
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton.icon(
+                            onPressed: () => setState(
+                              () => _calendarVisible = !_calendarVisible,
+                            ),
+                            icon: Icon(
+                              _calendarVisible
+                                  ? Icons.calendar_month
+                                  : Icons.calendar_month_outlined,
+                            ),
+                            label: Text(_calendarVisible ? '收起日历' : '展开日历'),
+                          ),
+                        ),
+                      ),
+                      AnimatedSize(
+                        duration: reduce
+                            ? Duration.zero
+                            : AppMotion.stateDuration,
+                        curve: AppMotion.easeOut,
+                        child: _calendarVisible
+                            ? _MonthCalendar(
+                                selected: day,
+                                tasks: tasks,
+                                onSelect: _selectDay,
+                              )
+                            : const SizedBox.shrink(),
                       ),
                       (active.isEmpty && future.isEmpty)
                           ? _EmptyState(isToday: isToday, selected: day)
@@ -483,6 +509,7 @@ class _MonthCalendar extends StatelessWidget {
                                 .where(
                                   (task) =>
                                       task.priority == Priority.high &&
+                                      task.repeatType != RepeatType.daily &&
                                       task.isActiveOn(day),
                                 )
                                 .toList()
