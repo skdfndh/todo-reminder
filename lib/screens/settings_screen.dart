@@ -5,12 +5,35 @@ import 'package:open_filex/open_filex.dart';
 import '../providers/task_providers.dart';
 import '../theme.dart';
 import '../utils/motion.dart';
+import '../widgets/update_dialog.dart';
+import 'statistics_screen.dart';
 
-class SettingsScreen extends ConsumerWidget {
+class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+  bool _checkingUpdate = false;
+
+  Future<void> _checkForUpdate() async {
+    setState(() => _checkingUpdate = true);
+    final outcome = await checkForUpdatesAndPrompt(context, ref);
+    if (!mounted) return;
+    setState(() => _checkingUpdate = false);
+    if (outcome == UpdateCheckOutcome.noUpdate) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('已为最新版本')));
+    } else if (outcome == UpdateCheckOutcome.checking) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('正在检查更新，请稍候')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final mode = ref.watch(sortModeProvider);
     final doneLast = ref.watch(doneLastProvider);
     final themeMode = ref.watch(themeModeProvider);
@@ -84,6 +107,35 @@ class SettingsScreen extends ConsumerWidget {
                   .read(taskRepositoryProvider)
                   .setSetting('theme_mode', value.first.name);
             },
+          ),
+          const SizedBox(height: 24),
+          Text('统计', style: Theme.of(context).textTheme.titleMedium),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.insights_outlined),
+            title: const Text('查看统计'),
+            subtitle: const Text('查看重复待办和常用模板的完成情况'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const StatisticsScreen()),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text('应用更新', style: Theme.of(context).textTheme.titleMedium),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: _checkingUpdate
+                ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.system_update_outlined),
+            title: const Text('检查更新'),
+            subtitle: const Text('检查是否有可下载安装的新版本'),
+            trailing: const Icon(Icons.chevron_right),
+            enabled: !_checkingUpdate,
+            onTap: _checkingUpdate ? null : _checkForUpdate,
           ),
           const SizedBox(height: 24),
           Text('数据备份', style: Theme.of(context).textTheme.titleMedium),

@@ -173,6 +173,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           advanceMinutes: quick.advanceMinutes,
                           date: dateKey(_selected),
                           priority: quick.priority,
+                          sourceQuickTaskId: quick.id,
                           createdAt: now,
                           updatedAt: now,
                         ),

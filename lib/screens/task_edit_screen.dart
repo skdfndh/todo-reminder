@@ -134,6 +134,7 @@ class _TaskEditScreenState extends ConsumerState<TaskEditScreen> {
       doneToday: original?.doneToday ?? false,
       doneDate: original?.doneDate,
       doneCount: original?.doneCount ?? 0,
+      sourceQuickTaskId: original?.sourceQuickTaskId,
       createdAt: original?.createdAt ?? now,
       updatedAt: now,
     );
@@ -174,6 +175,7 @@ class _TaskEditScreenState extends ConsumerState<TaskEditScreen> {
             advanceMinutes: _advanceMinutes,
           ),
         );
+    ref.invalidate(quickTasksProvider);
     if (mounted) _toast('已存为常用任务');
   }
 

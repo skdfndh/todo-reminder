@@ -6,9 +6,9 @@
 
 最新版本 APK 见 [Releases](https://github.com/skdfndh/todo-reminder/releases)，按手机 CPU 架构选择：
 
-- [arm64-v8a（大多数现代手机）](https://github.com/skdfndh/todo-reminder/releases/download/v1.4.0/app-arm64-v8a-release.apk)
-- [armeabi-v7a（老款 32 位设备）](https://github.com/skdfndh/todo-reminder/releases/download/v1.4.0/app-armeabi-v7a-release.apk)
-- [x86_64（模拟器）](https://github.com/skdfndh/todo-reminder/releases/download/v1.4.0/app-x86_64-release.apk)
+- [arm64-v8a（大多数现代手机）](https://github.com/skdfndh/todo-reminder/releases/download/v1.5.0/app-arm64-v8a-release.apk)
+- [armeabi-v7a（老款 32 位设备）](https://github.com/skdfndh/todo-reminder/releases/download/v1.5.0/app-armeabi-v7a-release.apk)
+- [x86_64（模拟器）](https://github.com/skdfndh/todo-reminder/releases/download/v1.5.0/app-x86_64-release.apk)
 
 > 安装时如提示「未知来源」请允许；首次打开请允许「通知」和「精确闹钟」权限，否则到点无法准时提醒。
 > 安装过旧版本后再次打开，App 会自动检测 GitHub 上的新版本并引导更新，确认后直接下载安装，无需手动重新下载。
@@ -22,6 +22,7 @@
 - **时间窗口**：重复任务可设「开始日期 / 结束日期」，窗口内提醒、到期自动停。
 - **打勾完成**：每个待办都能打勾；重复任务打勾只标记当天，跨天自动复位。
 - **统计完成天数**：可开关，开启后累计显示「已完成 N 天」。
+- **统计中心**：按全部时间、本月或近 30 天查看每日、每周、每月和常用模板的设立、完成与完成率。
 - **重要性涂色**：低（蓝灰）/ 中（橙黄）/ 高（红）三档，卡片框内按重要性涂色。
 - **排序与置顶**：可在「按时间 / 重要性优先」间切换，支持手动置顶；可让已完成自动排在未完成下面。
 - **应用内更新**：打开旧版自动检测 GitHub 上的新版本，弹窗展示新旧版本号与更新内容，确认后按设备架构下载安装。

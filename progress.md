@@ -57,6 +57,7 @@
 ### 第七阶段：UI 动效打磨 + 正式签名（2026-08-26）
 - **UI 动效打磨**（按 emil-design-eng 框架）：按钮/卡片按压反馈（`PressableScale`，scale 0.97）；打勾勾号淡入动画；统一页面过渡（`fadeSlideRoute`，进 250ms / 出 150ms）；切换日期列表淡入；卡片暖阴影；所有动效尊重系统「减少动画」。
 - **更新弹窗优化**：展示新旧版本号、更新内容，并提示先打开网络代理再点击更新。
+- **统计中心**：支持按全部时间、本月、近 30 天汇总每日、每周、每月和常用模板的完成情况；常用模板新建任务会保留来源关联，供后续准确统计。
 - **正式签名**：生成固定 release keystore（`android/app/upload-keystore.jks`，gitignore），密码存本地 `android/key.properties` + GitHub Secrets；`build.gradle.kts` 与 `release.yml` 改用正式签名，本地与 CI 构建签名一致。
 - 修复应用内更新「签名不一致」：此前 CI 每次随机生成 debug 签名导致版本间无法覆盖安装；配置固定 keystore 后统一。
 - 发布 **Release v1.3.0**。
@@ -128,7 +129,7 @@ test/{schedule_test,task_test,version_test,abi_test}.dart
 | 项 | 值 |
 |----|-----|
 | 仓库 | https://github.com/skdfndh/todo-reminder（公开） |
-| Release | v1.3.0（3 个 APK） |
+| Release | v1.5.0（3 个 APK） |
 | CI | 推送 `v*` 标签自动构建 + 发 Release |
 | 验证命令 | `flutter analyze` / `flutter test` / `flutter build apk` |
 

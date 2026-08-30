@@ -44,6 +44,10 @@ final tasksProvider = AsyncNotifierProvider<TasksNotifier, List<Task>>(
   TasksNotifier.new,
 );
 
+final quickTasksProvider = FutureProvider<List<QuickTask>>((ref) {
+  return ref.read(taskRepositoryProvider).getQuickTasks();
+});
+
 String dateKey(DateTime d) =>
     '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 

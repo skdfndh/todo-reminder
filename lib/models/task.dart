@@ -61,6 +61,7 @@ class Task {
     this.doneDate,
     this.doneCount = 0,
     this.completedDates = const {},
+    this.sourceQuickTaskId,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -116,6 +117,9 @@ class Task {
   final int doneCount;
 
   final Set<String> completedDates;
+
+  /// 从常用一次性待办创建时记录其模板 ID，供使用统计关联。
+  final int? sourceQuickTaskId;
 
   final int createdAt;
   final int updatedAt;
@@ -275,6 +279,7 @@ class Task {
     Object? doneDate = _unset,
     int? doneCount,
     Set<String>? completedDates,
+    Object? sourceQuickTaskId = _unset,
     int? createdAt,
     int? updatedAt,
   }) {
@@ -306,6 +311,9 @@ class Task {
           : doneDate as String?,
       doneCount: doneCount ?? this.doneCount,
       completedDates: completedDates ?? this.completedDates,
+      sourceQuickTaskId: identical(sourceQuickTaskId, _unset)
+          ? this.sourceQuickTaskId
+          : sourceQuickTaskId as int?,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -336,6 +344,7 @@ class Task {
       'done_today': doneToday ? 1 : 0,
       'done_date': doneDate,
       'done_count': doneCount,
+      'source_quick_task_id': sourceQuickTaskId,
       'created_at': createdAt,
       'updated_at': updatedAt,
     };
@@ -371,6 +380,7 @@ class Task {
       doneToday: (map['done_today'] as int? ?? 0) == 1,
       doneDate: map['done_date'] as String?,
       doneCount: map['done_count'] as int? ?? 0,
+      sourceQuickTaskId: map['source_quick_task_id'] as int?,
       createdAt: map['created_at'] as int,
       updatedAt: map['updated_at'] as int,
     );

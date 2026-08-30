@@ -9,6 +9,7 @@ Task _task({
   int? dayOfMonth,
   int hour = 9,
   int minute = 0,
+  int? sourceQuickTaskId,
   String? startDate,
   String? endDate,
   Priority priority = Priority.medium,
@@ -26,6 +27,7 @@ Task _task({
     endDate: endDate,
     priority: priority,
     pinned: pinned,
+    sourceQuickTaskId: sourceQuickTaskId,
     createdAt: 0,
     updatedAt: 0,
   );
@@ -182,6 +184,16 @@ void main() {
       final low = _task(date: '2026-08-31', priority: Priority.low);
 
       expect(tomorrowImportantTasks([daily, once, low], tomorrow), [once]);
+    });
+  });
+
+  group('常用模板来源', () {
+    test('序列化和复制时保留来源模板 ID', () {
+      final task = _task(sourceQuickTaskId: 7);
+      expect(task.toMap()['source_quick_task_id'], 7);
+      expect(task.copyWith().sourceQuickTaskId, 7);
+      expect(task.copyWith(sourceQuickTaskId: null).sourceQuickTaskId, isNull);
+      expect(Task.fromMap({...task.toMap(), 'id': 1}).sourceQuickTaskId, 7);
     });
   });
 }

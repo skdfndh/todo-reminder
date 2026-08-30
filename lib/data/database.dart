@@ -19,7 +19,7 @@ class AppDatabase {
     final path = p.join(dir, 'todo_reminder.db');
     return openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -58,6 +58,12 @@ class AppDatabase {
         'ALTER TABLE tasks ADD COLUMN advance_minutes INTEGER NOT NULL DEFAULT 0',
       );
       await _createAuxiliaryTables(db);
+    }
+    if (oldVersion < 4) {
+      // 记录一次性待办的常用模板来源，供模板使用统计准确关联。
+      await db.execute(
+        'ALTER TABLE tasks ADD COLUMN source_quick_task_id INTEGER',
+      );
     }
   }
 
@@ -112,6 +118,7 @@ class AppDatabase {
       done_today INTEGER NOT NULL DEFAULT 0,
       done_date TEXT,
       done_count INTEGER NOT NULL DEFAULT 0,
+      source_quick_task_id INTEGER,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     )

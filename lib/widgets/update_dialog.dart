@@ -11,23 +11,31 @@ import '../utils/motion.dart';
 /// 同会话只检查一次，避免反复打扰。
 bool _checking = false;
 
-/// 启动后检查更新并弹窗引导。无新版本 / 网络异常一律静默。
-Future<void> checkForUpdatesAndPrompt(
+enum UpdateCheckOutcome { updateAvailable, noUpdate, checking }
+
+/// 检查更新并弹窗引导；调用方可根据结果决定是否提示已是最新版本。
+Future<UpdateCheckOutcome> checkForUpdatesAndPrompt(
   BuildContext context,
   WidgetRef ref,
 ) async {
-  if (_checking) return;
+  if (_checking) return UpdateCheckOutcome.checking;
   _checking = true;
 
-  final service = ref.read(updateServiceProvider);
-  final result = await service.checkForUpdate();
-  if (result == null || !context.mounted) return;
+  try {
+    final service = ref.read(updateServiceProvider);
+    final result = await service.checkForUpdate();
+    if (result == null || !context.mounted) return UpdateCheckOutcome.noUpdate;
 
-  final current = await service.currentVersion();
-  if (!context.mounted) return;
-  final update = await _confirmVersionDialog(context, result, current);
-  if (update != true || !context.mounted) return;
-  await _downloadAndInstall(context, service, result);
+    final current = await service.currentVersion();
+    if (!context.mounted) return UpdateCheckOutcome.noUpdate;
+    final update = await _confirmVersionDialog(context, result, current);
+    if (update == true && context.mounted) {
+      await _downloadAndInstall(context, service, result);
+    }
+    return UpdateCheckOutcome.updateAvailable;
+  } finally {
+    _checking = false;
+  }
 }
 
 /// 「发现新版本」确认弹窗：展示摘要，可按需查看完整发布说明。
