@@ -48,116 +48,148 @@ Future<bool?> _confirmVersionDialog(
     context: context,
     animationStyle: AppMotion.sheetStyle,
     builder: (ctx) {
-      final theme = Theme.of(ctx);
       final notes = result.releaseNotes.trim();
       final summary = releaseSummaryLines(notes);
-      return AlertDialog(
-        title: Text('发现新版本 v${result.latestVersion}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('是否立即更新？'),
-            const SizedBox(height: 12),
-            // 新旧版本号对比。
-            Text(
-              '当前版本 v${currentVersion ?? '?'}  →  新版本 v${result.latestVersion}',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurface,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              '本次更新：',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurface,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 4),
-            if (summary.isEmpty)
-              Text(
-                '优化体验并修复已知问题。',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              )
-            else
-              for (final item in summary)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 2),
-                  child: Text(
-                    '• $item',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ),
-            const SizedBox(height: 12),
-            // 下载来源提示：GitHub 需要网络代理。
-            Text(
-              '提示：更新包托管在 GitHub，请先打开网络代理（梯子）再点击「立即更新」，以免下载失败。',
-              style: theme.textTheme.bodySmall?.copyWith(color: AppColors.high),
-            ),
-          ],
+      var expanded = false;
+      return StatefulBuilder(
+        builder: (ctx, setState) => _UpdateConfirmationDialog(
+          result: result,
+          currentVersion: currentVersion,
+          notes: notes,
+          summary: summary,
+          expanded: expanded,
+          onToggleDetails: () => setState(() => expanded = !expanded),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('暂不'),
-          ),
-          if (notes.isNotEmpty)
-            TextButton(
-              onPressed: () =>
-                  _showReleaseNotes(ctx, result.latestVersion, notes),
-              child: const Text('查看详情'),
-            ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('立即更新'),
-          ),
-        ],
       );
     },
   );
 }
 
-/// 将完整发布说明放到独立弹窗，避免更新确认页被长文本挤占。
-Future<void> _showReleaseNotes(
-  BuildContext context,
-  String version,
-  String notes,
-) {
-  return showDialog<void>(
-    context: context,
-    animationStyle: AppMotion.sheetStyle,
-    builder: (ctx) {
-      final theme = Theme.of(ctx);
-      return AlertDialog(
-        title: Text('v$version 更新详情'),
-        content: ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 360),
-          child: SingleChildScrollView(
+class _UpdateConfirmationDialog extends StatelessWidget {
+  const _UpdateConfirmationDialog({
+    required this.result,
+    required this.currentVersion,
+    required this.notes,
+    required this.summary,
+    required this.expanded,
+    required this.onToggleDetails,
+  });
+
+  final UpdateCheckResult result;
+  final String? currentVersion;
+  final String notes;
+  final List<String> summary;
+  final bool expanded;
+  final VoidCallback onToggleDetails;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final reduce = MediaQuery.disableAnimationsOf(context);
+    return AlertDialog(
+      title: Text('发现新版本 v${result.latestVersion}'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('是否立即更新？'),
+          const SizedBox(height: 12),
+          // 新旧版本号对比。
+          Text(
+            '当前版本 v${currentVersion ?? '?'}  →  新版本 v${result.latestVersion}',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurface,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            '本次更新：',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurface,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 4),
+          AnimatedSize(
+            duration: reduce ? Duration.zero : AppMotion.stateDuration,
+            curve: AppMotion.easeOut,
+            alignment: Alignment.topCenter,
+            child: expanded
+                ? ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 240),
+                    child: SingleChildScrollView(
+                      child: Text(
+                        notes,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  )
+                : _UpdateSummary(summary: summary),
+          ),
+          const SizedBox(height: 12),
+          // 下载来源提示：GitHub 需要网络代理。
+          Text(
+            '提示：更新包托管在 GitHub，请先打开网络代理（梯子）再点击「立即更新」，以免下载失败。',
+            style: theme.textTheme.bodySmall?.copyWith(color: AppColors.high),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(false),
+          child: const Text('暂不'),
+        ),
+        if (notes.isNotEmpty)
+          TextButton(
+            onPressed: onToggleDetails,
+            child: Text(expanded ? '收起详情' : '展开详情'),
+          ),
+        FilledButton(
+          onPressed: () => Navigator.of(ctx).pop(true),
+          child: const Text('立即更新'),
+        ),
+      ],
+    );
+  }
+}
+
+class _UpdateSummary extends StatelessWidget {
+  const _UpdateSummary({required this.summary});
+
+  final List<String> summary;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    if (summary.isEmpty) {
+      return Text(
+        '优化体验并修复已知问题。',
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final item in summary)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 2),
             child: Text(
-              notes,
-              style: theme.textTheme.bodyMedium?.copyWith(
+              '• $item',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('关闭'),
-          ),
-        ],
-      );
-    },
-  );
+      ],
+    );
+  }
 }
 
 /// 下载 APK 到缓存目录，展示进度，完成后唤起系统安装器。
