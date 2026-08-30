@@ -89,8 +89,8 @@ List<Task> sortTasks(
     if (mode == SortMode.importance && a.priority.value != b.priority.value) {
       return b.priority.value.compareTo(a.priority.value);
     }
-    final na = a.nextOccurrence(now);
-    final nb = b.nextOccurrence(now);
+    final na = _sortTime(a, now, viewDay);
+    final nb = _sortTime(b, now, viewDay);
     if (na == null && nb == null) return 0;
     if (na == null) return 1;
     if (nb == null) return -1;
@@ -98,6 +98,19 @@ List<Task> sortTasks(
   }
 
   return [...tasks]..sort(cmp);
+}
+
+DateTime? _sortTime(Task task, DateTime now, DateTime? viewDay) {
+  if (viewDay != null && task.isActiveOn(viewDay)) {
+    return DateTime(
+      viewDay.year,
+      viewDay.month,
+      viewDay.day,
+      task.remindHour,
+      task.remindMinute,
+    );
+  }
+  return task.nextOccurrence(now);
 }
 
 /// 任务列表状态：负责数据库读写，并在每次变更后同步通知调度。
