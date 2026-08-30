@@ -28,14 +28,30 @@ class UpdateCheckResult {
   final String releaseNotes;
 }
 
+/// 从发布说明中提取少量摘要，供更新确认弹窗快速浏览。
+List<String> releaseSummaryLines(String releaseNotes, {int maxLines = 2}) {
+  return releaseNotes
+      .split('\n')
+      .map((line) => line.trim())
+      .where((line) => line.isNotEmpty && !line.startsWith('#'))
+      .map(
+        (line) =>
+            line.replaceFirst(RegExp(r'^(#{1,6}\s+|[-*+]\s+|\d+[.)]\s+)'), ''),
+      )
+      .take(maxLines)
+      .toList();
+}
+
 /// 检查 GitHub 最新 release 并下载对应 APK。
 ///
 /// 所有异常都在服务内部捕获：无新版本、无对应 ABI 产物或网络失败一律返回
 /// null / 抛错，由调用方静默处理，不打扰用户。
 class UpdateService {
   UpdateService({Dio? dio})
-      : _dio = dio ??
-            Dio(BaseOptions(
+    : _dio =
+          dio ??
+          Dio(
+            BaseOptions(
               headers: {
                 // GitHub API 对缺失 User-Agent 的请求直接 403。
                 'User-Agent': 'todo-reminder-app',
@@ -43,7 +59,8 @@ class UpdateService {
               },
               connectTimeout: const Duration(seconds: 10),
               receiveTimeout: const Duration(seconds: 20),
-            ));
+            ),
+          );
 
   final Dio _dio;
 

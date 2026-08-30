@@ -30,7 +30,7 @@ Future<void> checkForUpdatesAndPrompt(
   await _downloadAndInstall(context, service, result);
 }
 
-/// 「发现新版本」确认弹窗：新旧版本号、更新内容，并提醒先打开网络代理。
+/// 「发现新版本」确认弹窗：展示摘要，可按需查看完整发布说明。
 Future<bool?> _confirmVersionDialog(
   BuildContext context,
   UpdateCheckResult result,
@@ -42,6 +42,7 @@ Future<bool?> _confirmVersionDialog(
     builder: (ctx) {
       final theme = Theme.of(ctx);
       final notes = result.releaseNotes.trim();
+      final summary = releaseSummaryLines(notes);
       return AlertDialog(
         title: Text('发现新版本 v${result.latestVersion}'),
         content: Column(
@@ -54,32 +55,39 @@ Future<bool?> _confirmVersionDialog(
             Text(
               '当前版本 v${currentVersion ?? '?'}  →  新版本 v${result.latestVersion}',
               style: theme.textTheme.bodyMedium?.copyWith(
-                color: AppColors.ink,
+                color: theme.colorScheme.onSurface,
                 fontWeight: FontWeight.w600,
               ),
             ),
-            if (notes.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Text(
-                '本次更新：',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: AppColors.ink,
-                  fontWeight: FontWeight.w600,
-                ),
+            const SizedBox(height: 12),
+            Text(
+              '本次更新：',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurface,
+                fontWeight: FontWeight.w600,
               ),
-              const SizedBox(height: 4),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 160),
-                child: SingleChildScrollView(
+            ),
+            const SizedBox(height: 4),
+            if (summary.isEmpty)
+              Text(
+                '优化体验并修复已知问题。',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              )
+            else
+              for (final item in summary)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 2),
                   child: Text(
-                    notes,
+                    '• $item',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: AppColors.muted,
+                      color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
                 ),
-              ),
-            ],
             const SizedBox(height: 12),
             // 下载来源提示：GitHub 需要网络代理。
             Text(
@@ -93,9 +101,50 @@ Future<bool?> _confirmVersionDialog(
             onPressed: () => Navigator.of(ctx).pop(false),
             child: const Text('暂不'),
           ),
+          if (notes.isNotEmpty)
+            TextButton(
+              onPressed: () =>
+                  _showReleaseNotes(ctx, result.latestVersion, notes),
+              child: const Text('查看详情'),
+            ),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('立即更新'),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+/// 将完整发布说明放到独立弹窗，避免更新确认页被长文本挤占。
+Future<void> _showReleaseNotes(
+  BuildContext context,
+  String version,
+  String notes,
+) {
+  return showDialog<void>(
+    context: context,
+    animationStyle: AppMotion.sheetStyle,
+    builder: (ctx) {
+      final theme = Theme.of(ctx);
+      return AlertDialog(
+        title: Text('v$version 更新详情'),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 360),
+          child: SingleChildScrollView(
+            child: Text(
+              notes,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('关闭'),
           ),
         ],
       );

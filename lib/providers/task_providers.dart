@@ -47,6 +47,18 @@ final tasksProvider = AsyncNotifierProvider<TasksNotifier, List<Task>>(
 String dateKey(DateTime d) =>
     '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
+/// 明日提示只保留非每日重复的高优先级事项，避免每天重复事项反复打扰。
+List<Task> tomorrowImportantTasks(List<Task> tasks, DateTime tomorrow) {
+  return tasks
+      .where(
+        (task) =>
+            task.priority == Priority.high &&
+            task.repeatType != RepeatType.daily &&
+            task.isActiveOn(tomorrow),
+      )
+      .toList();
+}
+
 /// 按排序方式排序（置顶最前，其次已完成分组，再其次重要性/时间）。
 ///
 /// [viewDay] 为按天视图当前查看的日期：已完成分组按该日期的完成态判断

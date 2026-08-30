@@ -39,8 +39,22 @@ class TaskTile extends StatelessWidget {
         next.isBefore(now);
 
     final color = priorityColor(task.priority);
-    final tint = priorityTint(task.priority);
     final done = this.done ?? task.doneToday;
+    final priorityBackground = theme.brightness == Brightness.dark
+        ? Color.alphaBlend(
+            color.withValues(alpha: 0.16),
+            theme.colorScheme.surfaceContainerHighest,
+          )
+        : priorityTint(task.priority);
+    final background = overdue
+        ? theme.brightness == Brightness.dark
+              ? theme.colorScheme.surfaceContainerHighest
+              : AppColors.overdueTint
+        : done
+        ? theme.brightness == Brightness.dark
+              ? theme.colorScheme.surface
+              : AppColors.paper
+        : priorityBackground;
 
     final subtitleParts = <String>[
       task.timeLabel,
@@ -55,12 +69,12 @@ class TaskTile extends StatelessWidget {
 
     final titleColor = done
         ? theme.colorScheme.onSurfaceVariant
-        : AppColors.ink;
+        : theme.colorScheme.onSurface;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: done ? AppColors.paper : tint,
+        color: background,
         borderRadius: BorderRadius.circular(14),
         // 极轻的暖阴影提层次，保留手账纸卡感。
         boxShadow: [

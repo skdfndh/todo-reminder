@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:todo_reminder/services/update_service.dart';
 import 'package:todo_reminder/utils/version.dart';
 
 void main() {
@@ -39,17 +40,33 @@ void main() {
 
     test('isNewerThan', () {
       expect(
-        AppVersion.tryParse('1.1.0')!.isNewerThan(AppVersion.tryParse('1.0.0')!),
+        AppVersion.tryParse('1.1.0')!
+            .isNewerThan(AppVersion.tryParse('1.0.0')!),
         isTrue,
       );
       expect(
-        AppVersion.tryParse('1.0.0')!.isNewerThan(AppVersion.tryParse('1.0.0')!),
+        AppVersion.tryParse('1.0.0')!
+            .isNewerThan(AppVersion.tryParse('1.0.0')!),
         isFalse,
       );
       expect(
-        AppVersion.tryParse('0.9.0')!.isNewerThan(AppVersion.tryParse('1.0.0')!),
+        AppVersion.tryParse('0.9.0')!
+            .isNewerThan(AppVersion.tryParse('1.0.0')!),
         isFalse,
       );
+    });
+  });
+
+  group('releaseSummaryLines', () {
+    test('提取并清理前两条发布说明', () {
+      expect(releaseSummaryLines('# v1.5.0\n- 优化深色模式\n* 改进翻页效果\n- 修复提醒'), [
+        '优化深色模式',
+        '改进翻页效果',
+      ]);
+    });
+
+    test('跳过空行，最多保留两条', () {
+      expect(releaseSummaryLines('\n\n1. 修复提醒\n2) 优化日历'), ['修复提醒', '优化日历']);
     });
   });
 }

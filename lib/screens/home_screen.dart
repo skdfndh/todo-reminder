@@ -25,8 +25,12 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
+  static const _initialPage = 10000;
+
   late DateTime _selected;
+  late DateTime _pageAnchor;
   late String _todayKey;
+  late final PageController _pageController;
   final TextEditingController _searchCtrl = TextEditingController();
   String _query = '';
   late final NotificationService _notificationService;
@@ -37,6 +41,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     super.initState();
     final now = DateTime.now();
     _selected = DateTime(now.year, now.month, now.day);
+    _pageAnchor = _selected;
+    _pageController = PageController(initialPage: _initialPage);
     _todayKey = dateKey(now);
     _notificationService = ref.read(notificationServiceProvider);
     _notificationService.openedTaskId.addListener(_openFromNotification);
@@ -50,7 +56,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       if (k != _todayKey) {
         _todayKey = k;
         if (mounted) {
-          setState(() => _selected = DateTime(n.year, n.month, n.day));
+          _selectDay(DateTime(n.year, n.month, n.day), animate: false);
         }
         ref.read(tasksProvider.notifier).rollover();
       }
@@ -65,6 +71,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void dispose() {
     _notificationService.openedTaskId.removeListener(_openFromNotification);
     _timer?.cancel();
+    _pageController.dispose();
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -91,20 +98,35 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final day = task.repeatType == RepeatType.once && task.date != null
         ? DateTime.parse(task.date!)
         : DateTime.now();
-    setState(() => _selected = DateTime(day.year, day.month, day.day));
+    _selectDay(DateTime(day.year, day.month, day.day), animate: false);
     Navigator.of(context).push(fadeSlideRoute(TaskEditScreen(task: task)));
     _notificationService.openedTaskId.value = null;
   }
 
-  bool get _isToday => dateKey(_selected) == _todayKey;
+  DateTime _dayForPage(int page) =>
+      _pageAnchor.add(Duration(days: page - _initialPage));
 
-  void _shift(int days) {
-    setState(() => _selected = _selected.add(Duration(days: days)));
+  int _pageForDay(DateTime day) =>
+      _initialPage + day.difference(_pageAnchor).inDays;
+
+  void _selectDay(DateTime day, {bool animate = true}) {
+    final normalized = DateTime(day.year, day.month, day.day);
+    final targetPage = _pageForDay(normalized);
+    if (!_pageController.hasClients || !animate) {
+      _pageController.jumpToPage(targetPage);
+      setState(() => _selected = normalized);
+      return;
+    }
+    _pageController.animateToPage(
+      targetPage,
+      duration: const Duration(milliseconds: 220),
+      curve: AppMotion.easeOut,
+    );
   }
 
   void _goToday() {
     final n = DateTime.now();
-    setState(() => _selected = DateTime(n.year, n.month, n.day));
+    _selectDay(DateTime(n.year, n.month, n.day));
   }
 
   Future<void> _showAddOptions() async {
@@ -171,9 +193,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       lastDate: DateTime.now().add(const Duration(days: 365 * 5)),
     );
     if (picked != null) {
-      setState(
-        () => _selected = DateTime(picked.year, picked.month, picked.day),
-      );
+      _selectDay(picked);
     }
   }
 
@@ -187,8 +207,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('待办提醒'),
-        backgroundColor: AppColors.paper,
-        foregroundColor: AppColors.ink,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        foregroundColor: Theme.of(context).colorScheme.onSurface,
         elevation: 0,
         actions: [
           PressableScale(
@@ -213,40 +233,32 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           child: const Icon(Icons.add),
         ),
       ),
-      body: GestureDetector(
-        onHorizontalDragEnd: (details) {
-          final velocity = details.primaryVelocity ?? 0;
-          if (velocity.abs() < 300) return;
-          _shift(velocity < 0 ? 1 : -1);
-        },
-        child: Column(
-          children: [
-            _DateHeader(
-              selected: _selected,
-              isToday: _isToday,
-              onPrev: () => _shift(-1),
-              onNext: () => _shift(1),
-              onJump: _jump,
-              onGoToday: _goToday,
-            ),
-            Expanded(
-              child: tasksAsync.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, _) => Center(child: Text('加载失败：$e')),
-                data: (tasks) {
-                  final active = sortTasks(
-                    tasks
-                        .where((t) => t.isActiveOn(_selected) && _matches(t))
-                        .toList(),
-                    mode,
-                    doneLast: doneLast,
-                    viewDay: _selected,
-                  );
-                  final future = _isToday
-                      ? _tomorrowImportant(tasks)
-                      : const <Task>[];
-
-                  return ListView(
+      body: tasksAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(child: Text('加载失败：$e')),
+        data: (tasks) {
+          Widget buildDayPage(DateTime day) {
+            final isToday = dateKey(day) == _todayKey;
+            final active = sortTasks(
+              tasks.where((t) => t.isActiveOn(day) && _matches(t)).toList(),
+              mode,
+              doneLast: doneLast,
+              viewDay: day,
+            );
+            final future = isToday ? _tomorrowImportant(tasks) : const <Task>[];
+            return Column(
+              children: [
+                _DateHeader(
+                  selected: day,
+                  isToday: isToday,
+                  onPrev: () =>
+                      _selectDay(day.subtract(const Duration(days: 1))),
+                  onNext: () => _selectDay(day.add(const Duration(days: 1))),
+                  onJump: _jump,
+                  onGoToday: _goToday,
+                ),
+                Expanded(
+                  child: ListView(
                     padding: const EdgeInsets.only(bottom: 96),
                     children: [
                       Padding(
@@ -262,105 +274,83 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         ),
                       ),
                       _MonthCalendar(
-                        selected: _selected,
+                        selected: day,
                         tasks: tasks,
-                        onSelect: (day) => setState(() => _selected = day),
+                        onSelect: _selectDay,
                       ),
-                      // 切换日期时内容淡入，避免瞬间替换突兀（低频主动操作）。
-                      AnimatedSwitcher(
-                        duration: reduce
-                            ? Duration.zero
-                            : AppMotion.stateDuration,
-                        switchInCurve: AppMotion.easeOut,
-                        switchOutCurve: AppMotion.easeInOut,
-                        transitionBuilder: (child, animation) => FadeTransition(
-                          opacity: animation,
-                          child: SlideTransition(
-                            position: Tween<Offset>(
-                              begin: const Offset(0, 0.015),
-                              end: Offset.zero,
-                            ).animate(animation),
-                            child: child,
-                          ),
-                        ),
-                        child: KeyedSubtree(
-                          key: ValueKey(dateKey(_selected)),
-                          child: (active.isEmpty && future.isEmpty)
-                              ? _EmptyState(
-                                  isToday: _isToday,
-                                  selected: _selected,
-                                )
-                              : Column(
-                                  children: [
-                                    if (active.isNotEmpty)
-                                      Padding(
-                                        padding: const EdgeInsets.fromLTRB(
-                                          16,
-                                          4,
-                                          16,
-                                          8,
-                                        ),
-                                        child: Text(
-                                          _isToday
-                                              ? '今天'
-                                              : '${_selected.month}月${_selected.day}日',
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .titleSmall
-                                              ?.copyWith(
-                                                color: AppColors.muted,
-                                              ),
-                                        ),
-                                      ),
-                                    for (final t in active)
-                                      TaskTile(
-                                        task: t,
-                                        done: t.isDoneOn(_selected),
-                                        onTap: () => Navigator.of(context).push(
-                                          fadeSlideRoute(
-                                            TaskEditScreen(task: t),
+                      (active.isEmpty && future.isEmpty)
+                          ? _EmptyState(isToday: isToday, selected: day)
+                          : Column(
+                              children: [
+                                if (active.isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      16,
+                                      4,
+                                      16,
+                                      8,
+                                    ),
+                                    child: Text(
+                                      isToday
+                                          ? '今天'
+                                          : '${day.month}月${day.day}日',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleSmall
+                                          ?.copyWith(
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .onSurfaceVariant,
                                           ),
-                                        ),
-                                        onToggleDone: () => ref
-                                            .read(tasksProvider.notifier)
-                                            .toggleDone(t, _selected),
-                                        canToggle: !_selected.isAfter(
-                                          DateTime(
-                                            DateTime.now().year,
-                                            DateTime.now().month,
-                                            DateTime.now().day,
-                                          ),
-                                        ),
-                                        onTogglePin: () => ref
-                                            .read(tasksProvider.notifier)
-                                            .togglePin(t),
-                                        onDelete: () => _confirmDelete(t),
+                                    ),
+                                  ),
+                                for (final t in active)
+                                  TaskTile(
+                                    task: t,
+                                    done: t.isDoneOn(day),
+                                    onTap: () => Navigator.of(context).push(
+                                      fadeSlideRoute(TaskEditScreen(task: t)),
+                                    ),
+                                    onToggleDone: () => ref
+                                        .read(tasksProvider.notifier)
+                                        .toggleDone(t, day),
+                                    canToggle: !day.isAfter(
+                                      DateTime(
+                                        DateTime.now().year,
+                                        DateTime.now().month,
+                                        DateTime.now().day,
                                       ),
-                                    if (future.isNotEmpty)
-                                      _FutureSection(
-                                        tasks: future,
-                                        onOpen: (t) {
-                                          final d = DateTime.parse(t.date!);
-                                          setState(
-                                            () => _selected = DateTime(
-                                              d.year,
-                                              d.month,
-                                              d.day,
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                  ],
-                                ),
-                        ),
-                      ),
+                                    ),
+                                    onTogglePin: () => ref
+                                        .read(tasksProvider.notifier)
+                                        .togglePin(t),
+                                    onDelete: () => _confirmDelete(t),
+                                  ),
+                                if (future.isNotEmpty)
+                                  _FutureSection(
+                                    tasks: future,
+                                    tomorrow: day.add(const Duration(days: 1)),
+                                    onOpen: (_) => _selectDay(
+                                      day.add(const Duration(days: 1)),
+                                    ),
+                                  ),
+                              ],
+                            ),
                     ],
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
+                  ),
+                ),
+              ],
+            );
+          }
+
+          if (reduce) return buildDayPage(_selected);
+          return PageView.builder(
+            controller: _pageController,
+            onPageChanged: (page) =>
+                setState(() => _selected = _dayForPage(page)),
+            itemBuilder: (context, page) => buildDayPage(_dayForPage(page)),
+          );
+        },
       ),
     );
   }
@@ -370,14 +360,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final todayOnly = DateTime(today.year, today.month, today.day);
     final tomorrow = todayOnly.add(const Duration(days: 1));
     return sortTasks(
-      tasks
-          .where(
-            (t) =>
-                t.priority == Priority.high &&
-                t.isActiveOn(tomorrow) &&
-                _matches(t),
-          )
-          .toList(),
+      tomorrowImportantTasks(tasks, tomorrow).where(_matches).toList(),
       ref.read(sortModeProvider),
       doneLast: ref.read(doneLastProvider),
       viewDay: tomorrow,
@@ -430,6 +413,13 @@ class _MonthCalendar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final surfaceColor = theme.brightness == Brightness.dark
+        ? theme.colorScheme.surfaceContainerHighest
+        : AppColors.surface;
+    final outlineColor = theme.brightness == Brightness.dark
+        ? theme.colorScheme.outline
+        : AppColors.line;
     final first = DateTime(selected.year, selected.month);
     final days = DateTime(selected.year, selected.month + 1, 0).day;
     final today = DateTime.now();
@@ -447,9 +437,9 @@ class _MonthCalendar extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(10, 0, 10, 8),
       padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: surfaceColor,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.line),
+        border: Border.all(color: outlineColor),
       ),
       child: Column(
         children: [
@@ -457,14 +447,16 @@ class _MonthCalendar extends StatelessWidget {
             children: [
               Text(
                 '${selected.year}年${selected.month}月',
-                style: Theme.of(context).textTheme.titleSmall
-                    ?.copyWith(fontWeight: FontWeight.w700),
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               const Spacer(),
               Text(
                 '红色为重要事项',
-                style: Theme.of(context).textTheme.bodySmall
-                    ?.copyWith(color: AppColors.muted),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
             ],
           ),
@@ -540,7 +532,7 @@ class _CalendarDay extends StatelessWidget {
                   color: isSelected
                       ? hasImportant
                             ? AppColors.high
-                            : AppColors.ink
+                            : Theme.of(context).colorScheme.primary
                       : Colors.transparent,
                   shape: BoxShape.circle,
                 ),
@@ -548,10 +540,10 @@ class _CalendarDay extends StatelessWidget {
                   '${day!.day}',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: isSelected
-                        ? AppColors.surface
+                        ? Theme.of(context).colorScheme.onPrimary
                         : hasImportant
                         ? AppColors.high
-                        : AppColors.ink,
+                        : Theme.of(context).colorScheme.onSurface,
                     fontWeight: hasImportant
                         ? FontWeight.w700
                         : FontWeight.w400,
@@ -620,7 +612,7 @@ class _DateHeader extends StatelessWidget {
                     Text(
                       title,
                       style: theme.textTheme.headlineMedium?.copyWith(
-                        color: AppColors.ink,
+                        color: theme.colorScheme.onSurface,
                         fontWeight: FontWeight.w800,
                         letterSpacing: 1,
                       ),
@@ -631,7 +623,7 @@ class _DateHeader extends StatelessWidget {
                         Text(
                           weekday,
                           style: theme.textTheme.bodySmall?.copyWith(
-                            color: AppColors.muted,
+                            color: theme.colorScheme.onSurfaceVariant,
                           ),
                         ),
                         if (!isToday) ...[
@@ -642,7 +634,7 @@ class _DateHeader extends StatelessWidget {
                               child: Text(
                                 '回到今天',
                                 style: theme.textTheme.bodySmall?.copyWith(
-                                  color: AppColors.ink,
+                                  color: theme.colorScheme.primary,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
@@ -669,21 +661,32 @@ class _DateHeader extends StatelessWidget {
 }
 
 class _FutureSection extends StatelessWidget {
-  const _FutureSection({required this.tasks, required this.onOpen});
+  const _FutureSection({
+    required this.tasks,
+    required this.tomorrow,
+    required this.onOpen,
+  });
 
   final List<Task> tasks;
+  final DateTime tomorrow;
   final ValueChanged<Task> onOpen;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final surfaceColor = theme.brightness == Brightness.dark
+        ? theme.colorScheme.surfaceContainerHighest
+        : AppColors.surface;
+    final outlineColor = theme.brightness == Brightness.dark
+        ? theme.colorScheme.outline
+        : AppColors.line;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       child: Container(
         decoration: BoxDecoration(
-          color: AppColors.surface,
+          color: surfaceColor,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.line),
+          border: Border.all(color: outlineColor),
         ),
         child: ExpansionTile(
           shape: const Border(),
@@ -705,7 +708,7 @@ class _FutureSection extends StatelessWidget {
                 ),
                 title: Text(t.title),
                 subtitle: Text(
-                  '${t.date?.substring(5).replaceAll('-', '月')}日 · ${t.timeLabel}',
+                  '${tomorrow.month}月${tomorrow.day}日 · ${t.timeLabel}',
                 ),
                 trailing: const Icon(Icons.chevron_right, size: 18),
                 onTap: () => onOpen(t),
@@ -730,7 +733,7 @@ class _EmptyState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.event_note, size: 64, color: AppColors.line),
+          Icon(Icons.event_note, size: 64, color: theme.colorScheme.outline),
           const SizedBox(height: 12),
           Text(
             isToday ? '今天没有待办' : '${selected.month}月${selected.day}日没有待办',
@@ -739,7 +742,9 @@ class _EmptyState extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             '点击右下角 + 添加一条提醒',
-            style: theme.textTheme.bodyMedium?.copyWith(color: AppColors.muted),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
           ),
         ],
       ),

@@ -20,6 +20,7 @@ class AppColors {
   static const highTint = Color(0xFFFDEAEC);
   static const mediumTint = Color(0xFFFCF1E0);
   static const lowTint = Color(0xFFEAF0F6);
+  static const overdueTint = Color(0xFFF0EEE9);
 }
 
 /// 重要性主色。
@@ -74,13 +75,23 @@ ThemeData buildAppTheme() {
 }
 
 ThemeData buildDarkAppTheme() {
-  final scheme = ColorScheme.fromSeed(
-    seedColor: AppColors.high,
-    brightness: Brightness.dark,
-  ).copyWith(primary: AppColors.surface, surface: const Color(0xFF201E1A));
+  final scheme =
+      ColorScheme.fromSeed(
+        seedColor: AppColors.high,
+        brightness: Brightness.dark,
+      ).copyWith(
+        primary: const Color(0xFFF3EEE7),
+        onPrimary: const Color(0xFF201E1A),
+        surface: const Color(0xFF201E1A),
+        onSurface: const Color(0xFFF3EEE7),
+        onSurfaceVariant: const Color(0xFFCFC7BC),
+        outline: const Color(0xFF514C45),
+        surfaceContainerHighest: const Color(0xFF2B2925),
+      );
   return ThemeData(
     useMaterial3: true,
     colorScheme: scheme,
+    scaffoldBackgroundColor: const Color(0xFF201E1A),
     filledButtonTheme: FilledButtonThemeData(
       style: ButtonStyle(animationDuration: AppMotion.pressDuration),
     ),

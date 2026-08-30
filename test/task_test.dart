@@ -170,4 +170,18 @@ void main() {
       expect(byDone.first, pending);
     });
   });
+
+  group('tomorrowImportantTasks', () {
+    test('每日重复的重要事项不进入明日提示', () {
+      final tomorrow = DateTime(2026, 8, 31);
+      final daily = _task(
+        repeatType: RepeatType.daily,
+        priority: Priority.high,
+      );
+      final once = _task(date: '2026-08-31', priority: Priority.high);
+      final low = _task(date: '2026-08-31', priority: Priority.low);
+
+      expect(tomorrowImportantTasks([daily, once, low], tomorrow), [once]);
+    });
+  });
 }
