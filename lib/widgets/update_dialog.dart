@@ -139,7 +139,7 @@ class _UpdateConfirmationDialog extends StatelessWidget {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.of(ctx).pop(false),
+          onPressed: () => Navigator.of(context).pop(false),
           child: const Text('暂不'),
         ),
         if (notes.isNotEmpty)
@@ -148,7 +148,7 @@ class _UpdateConfirmationDialog extends StatelessWidget {
             child: Text(expanded ? '收起详情' : '展开详情'),
           ),
         FilledButton(
-          onPressed: () => Navigator.of(ctx).pop(true),
+          onPressed: () => Navigator.of(context).pop(true),
           child: const Text('立即更新'),
         ),
       ],

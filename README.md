@@ -6,9 +6,9 @@
 
 最新版本 APK 见 [Releases](https://github.com/skdfndh/todo-reminder/releases)，按手机 CPU 架构选择：
 
-- [arm64-v8a（大多数现代手机）](https://github.com/skdfndh/todo-reminder/releases/download/v1.5.1/app-arm64-v8a-release.apk)
-- [armeabi-v7a（老款 32 位设备）](https://github.com/skdfndh/todo-reminder/releases/download/v1.5.1/app-armeabi-v7a-release.apk)
-- [x86_64（模拟器）](https://github.com/skdfndh/todo-reminder/releases/download/v1.5.1/app-x86_64-release.apk)
+- [arm64-v8a（大多数现代手机）](https://github.com/skdfndh/todo-reminder/releases/download/v1.5.2/app-arm64-v8a-release.apk)
+- [armeabi-v7a（老款 32 位设备）](https://github.com/skdfndh/todo-reminder/releases/download/v1.5.2/app-armeabi-v7a-release.apk)
+- [x86_64（模拟器）](https://github.com/skdfndh/todo-reminder/releases/download/v1.5.2/app-x86_64-release.apk)
 
 > 安装时如提示「未知来源」请允许；首次打开请允许「通知」和「精确闹钟」权限，否则到点无法准时提醒。
 > 安装过旧版本后再次打开，App 会自动检测 GitHub 上的新版本并引导更新，确认后直接下载安装，无需手动重新下载。
