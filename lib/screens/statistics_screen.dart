@@ -39,23 +39,21 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
             const SizedBox(height: 20),
             Text('重复待办', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
-            for (final type in const [
-              RepeatType.daily,
-              RepeatType.weekly,
-              RepeatType.monthly,
-            ])
+            if (items
+                .where((task) => task.repeatType != RepeatType.once)
+                .isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Text('还没有重复待办'),
+              ),
+            for (final task in items.where(
+              (task) => task.repeatType != RepeatType.once,
+            ))
               _StatisticsTile(
-                title: type.label,
-                icon: switch (type) {
-                  RepeatType.daily => Icons.today_outlined,
-                  RepeatType.weekly => Icons.date_range_outlined,
-                  RepeatType.monthly => Icons.calendar_month_outlined,
-                  RepeatType.once => Icons.event_outlined,
-                },
-                statistics: taskStatistics(
-                  items.where((task) => task.repeatType == type),
-                  _range,
-                ),
+                title: task.title,
+                detail: '${task.repeatRuleLabel} · ${task.timeLabel}',
+                icon: _repeatIcon(task.repeatType),
+                statistics: taskStatistics([task], _range),
               ),
             const SizedBox(height: 20),
             Text('常用一次性待办', style: Theme.of(context).textTheme.titleMedium),
@@ -76,6 +74,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                         for (final template in templates)
                           _StatisticsTile(
                             title: template.title,
+                            detail: '常用一次性待办',
                             icon: Icons.bookmark_outline,
                             statistics: taskStatistics(
                               items.where(
@@ -91,7 +90,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
             ),
             const SizedBox(height: 20),
             Text(
-              '应完成次数按当前重复规则和时间窗口计算；规则修改前的历史安排不会回溯。',
+              '每条记录单独统计；应完成次数按当前重复规则和时间窗口计算，规则修改前的历史安排不会回溯。',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
@@ -106,11 +105,13 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
 class _StatisticsTile extends StatelessWidget {
   const _StatisticsTile({
     required this.title,
+    required this.detail,
     required this.icon,
     required this.statistics,
   });
 
   final String title;
+  final String detail;
   final IconData icon;
   final CompletionStatistics statistics;
 
@@ -121,10 +122,17 @@ class _StatisticsTile extends StatelessWidget {
       leading: Icon(icon),
       title: Text(title),
       subtitle: Text(
-        '设立 ${statistics.setupCount} 次 · 应完成 ${statistics.dueCount} 次\n'
+        '$detail\n设立 ${statistics.setupCount} 次 · 应完成 ${statistics.dueCount} 次\n'
         '完成 ${statistics.completedCount} 次 · 漏做 ${statistics.missedCount} 次',
       ),
       trailing: Text('${statistics.completionRate}%'),
     );
   }
 }
+
+IconData _repeatIcon(RepeatType type) => switch (type) {
+  RepeatType.daily => Icons.today_outlined,
+  RepeatType.weekly => Icons.date_range_outlined,
+  RepeatType.monthly => Icons.calendar_month_outlined,
+  RepeatType.once => Icons.event_outlined,
+};

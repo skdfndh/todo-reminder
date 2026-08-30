@@ -269,7 +269,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           controller: _searchCtrl,
                           onChanged: (value) => setState(() => _query = value),
                           decoration: const InputDecoration(
-                            prefixIcon: Icon(Icons.search),
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(vertical: 10),
+                            prefixIcon: Icon(Icons.search, size: 24),
+                            prefixIconConstraints: BoxConstraints(
+                              minWidth: 48,
+                              minHeight: 40,
+                            ),
                             hintText: '搜索事项、备注或标签',
                             border: OutlineInputBorder(),
                           ),
@@ -309,28 +315,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           ? _EmptyState(isToday: isToday, selected: day)
                           : Column(
                               children: [
-                                if (active.isNotEmpty)
-                                  Padding(
-                                    padding: const EdgeInsets.fromLTRB(
-                                      16,
-                                      4,
-                                      16,
-                                      8,
-                                    ),
-                                    child: Text(
-                                      isToday
-                                          ? '今天'
-                                          : '${day.month}月${day.day}日',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .titleSmall
-                                          ?.copyWith(
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .onSurfaceVariant,
-                                          ),
-                                    ),
-                                  ),
                                 for (final t in active)
                                   TaskTile(
                                     task: t,
