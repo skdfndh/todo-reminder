@@ -50,7 +50,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _openFromNotification(),
     );
-    // 每 30 秒检查一次是否跨天，午夜 0 点自动翻页 + 复位打勾 + 重排通知。
+    // 每 30 秒检查一次是否跨天，午夜自动进入新日期并重排通知。
     _timer = Timer.periodic(const Duration(seconds: 30), (_) {
       final n = DateTime.now();
       final k = dateKey(n);
@@ -318,7 +318,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 for (final t in active)
                                   TaskTile(
                                     task: t,
-                                    done: t.isDoneOn(day),
+                                    done:
+                                        t.isDoneOn(day) ||
+                                        (isToday && t.doneToday),
                                     onTap: () => Navigator.of(context).push(
                                       fadeSlideRoute(TaskEditScreen(task: t)),
                                     ),
