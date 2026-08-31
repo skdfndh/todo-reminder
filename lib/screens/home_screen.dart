@@ -241,6 +241,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         data: (tasks) {
           Widget buildDayPage(DateTime day) {
             final isToday = dateKey(day) == _todayKey;
+            final searching = _query.trim().isNotEmpty;
+            final searchTasks = searching
+                ? tasks.where(_matches).toList()
+                : const <Task>[];
             final active = sortTasks(
               tasks.where((t) => t.isActiveOn(day) && _matches(t)).toList(),
               mode,
@@ -303,10 +307,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             ? Duration.zero
                             : AppMotion.stateDuration,
                         curve: AppMotion.easeOut,
-                        child: _calendarVisible
+                        child: _calendarVisible || searching
                             ? _MonthCalendar(
                                 selected: day,
                                 tasks: tasks,
+                                searchTasks: searchTasks,
                                 onSelect: _selectDay,
                               )
                             : const SizedBox.shrink(),
@@ -318,9 +323,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 for (final t in active)
                                   TaskTile(
                                     task: t,
-                                    done:
-                                        t.isDoneOn(day) ||
-                                        (isToday && t.doneToday),
+                                    done: t.isDoneOn(day),
                                     onTap: () => Navigator.of(context).push(
                                       fadeSlideRoute(TaskEditScreen(task: t)),
                                     ),
@@ -417,11 +420,13 @@ class _MonthCalendar extends StatelessWidget {
   const _MonthCalendar({
     required this.selected,
     required this.tasks,
+    required this.searchTasks,
     required this.onSelect,
   });
 
   final DateTime selected;
   final List<Task> tasks;
+  final List<Task> searchTasks;
   final ValueChanged<DateTime> onSelect;
 
   @override
@@ -466,7 +471,7 @@ class _MonthCalendar extends StatelessWidget {
               ),
               const Spacer(),
               Text(
-                '红色为重要事项',
+                searchTasks.isEmpty ? '红色为重要事项' : '圆点为搜索结果',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -500,6 +505,9 @@ class _MonthCalendar extends StatelessWidget {
                                 )
                                 .toList()
                           : const [],
+                      hasSearchResult:
+                          day != null &&
+                          searchTasks.any((task) => task.isActiveOn(day)),
                       onSelect: onSelect,
                     ),
                   ),
@@ -516,12 +524,14 @@ class _CalendarDay extends StatelessWidget {
     required this.day,
     required this.selected,
     required this.importantTasks,
+    required this.hasSearchResult,
     required this.onSelect,
   });
 
   final DateTime? day;
   final DateTime selected;
   final List<Task> importantTasks;
+  final bool hasSearchResult;
   final ValueChanged<DateTime> onSelect;
 
   @override
@@ -564,6 +574,16 @@ class _CalendarDay extends StatelessWidget {
                   ),
                 ),
               ),
+              if (hasSearchResult)
+                Container(
+                  width: 5,
+                  height: 5,
+                  margin: const EdgeInsets.only(top: 2),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primary,
+                    shape: BoxShape.circle,
+                  ),
+                ),
               for (final task in importantTasks)
                 Text(
                   task.title,

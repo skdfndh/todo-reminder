@@ -12,6 +12,7 @@ Task _task({
   int? sourceQuickTaskId,
   String? startDate,
   String? endDate,
+  int createdAt = 0,
   Priority priority = Priority.medium,
   bool pinned = false,
 }) {
@@ -28,8 +29,8 @@ Task _task({
     priority: priority,
     pinned: pinned,
     sourceQuickTaskId: sourceQuickTaskId,
-    createdAt: 0,
-    updatedAt: 0,
+    createdAt: createdAt,
+    updatedAt: createdAt,
   );
 }
 
@@ -50,6 +51,15 @@ void main() {
       expect(t.isActiveOn(DateTime(2026, 8, 25)), isTrue);
       expect(t.isActiveOn(DateTime(2026, 8, 29)), isFalse);
       expect(t.isActiveOn(DateTime(2026, 8, 19)), isFalse);
+    });
+
+    test('重复任务不会在设立日期之前生效', () {
+      final t = _task(
+        repeatType: RepeatType.daily,
+        createdAt: DateTime(2026, 8, 30, 12).millisecondsSinceEpoch,
+      );
+      expect(t.isActiveOn(DateTime(2026, 8, 29)), isFalse);
+      expect(t.isActiveOn(DateTime(2026, 8, 30)), isTrue);
     });
 
     test('每周任务只在勾选的星期几生效', () {

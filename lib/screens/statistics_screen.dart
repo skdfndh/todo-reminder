@@ -28,6 +28,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
           padding: const EdgeInsets.all(16),
           children: [
             SegmentedButton<StatisticsRange>(
+              showSelectedIcon: false,
               segments: [
                 for (final item in StatisticsRange.values)
                   ButtonSegment(value: item, label: Text(item.label)),

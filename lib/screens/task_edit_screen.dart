@@ -326,7 +326,7 @@ class _TaskEditScreenState extends ConsumerState<TaskEditScreen> {
               icon: Icons.play_circle_outline,
               label: '开始日期',
               value: _startDate,
-              display: _startDate != null ? _displayDate(_startDate!) : '未设置',
+              display: _startDate != null ? _displayDate(_startDate!) : '设立当天',
               onPick: () async {
                 final d = await _pickDay(_startDate ?? DateTime.now());
                 if (d != null) setState(() => _startDate = d);

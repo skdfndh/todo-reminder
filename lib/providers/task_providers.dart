@@ -178,13 +178,9 @@ class TasksNotifier extends AsyncNotifier<List<Task>> {
     final today = DateTime(now.year, now.month, now.day);
     final day = DateTime(viewDay.year, viewDay.month, viewDay.day);
     if (day.isAfter(today) || task.id == null) return;
-    final recordedDone = task.isDoneOn(day);
-    final visibleDone = recordedDone || (day == today && task.doneToday);
-    final done = !visibleDone;
+    final done = !task.isDoneOn(day);
     var count = task.doneCount;
-    if (task.statisticsEnabled && recordedDone != done) {
-      count += done ? 1 : -1;
-    }
+    if (task.statisticsEnabled) count += done ? 1 : -1;
     if (count < 0) count = 0;
     final doneToday = day == today ? done : task.isDoneOn(today);
 

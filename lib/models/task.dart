@@ -144,15 +144,19 @@ class Task {
     }
   }
 
-  /// 时间窗口的起始时刻（若设置了 startDate 且晚于 from，则以 startDate 为起点）。
+  DateTime get _effectiveStartDay {
+    final created = _dateOnly(DateTime.fromMillisecondsSinceEpoch(createdAt));
+    final configured = startDate != null
+        ? _dateOnly(DateTime.parse(startDate!))
+        : null;
+    if (configured == null || !configured.isAfter(created)) return created;
+    return configured;
+  }
+
+  /// 重复待办从设立当天或设置的更晚开始日期起生效。
   DateTime windowFrom(DateTime from) {
-    final s = startDate;
-    if (s != null) {
-      final sd = DateTime.parse(s);
-      final sdt = DateTime(sd.year, sd.month, sd.day);
-      if (sdt.isAfter(from)) return sdt;
-    }
-    return from;
+    final start = _effectiveStartDay;
+    return start.isAfter(from) ? start : from;
   }
 
   /// [next] 是否已超出结束日期（窗口结束）。
@@ -167,9 +171,8 @@ class Task {
   bool isActiveOn(DateTime day) {
     final d = _dateOnly(day);
     if (repeatType != RepeatType.once) {
-      final s = startDate != null ? DateTime.parse(startDate!) : null;
       final e = endDate != null ? DateTime.parse(endDate!) : null;
-      if (s != null && d.isBefore(_dateOnly(s))) return false;
+      if (d.isBefore(_effectiveStartDay)) return false;
       if (e != null && d.isAfter(_dateOnly(e))) return false;
     }
     switch (repeatType) {

@@ -134,6 +134,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(height: 16),
           Text('外观', style: Theme.of(context).textTheme.titleMedium),
           SegmentedButton<ThemeMode>(
+            showSelectedIcon: false,
             segments: const [
               ButtonSegment(value: ThemeMode.system, label: Text('跟随系统')),
               ButtonSegment(value: ThemeMode.light, label: Text('浅色')),
@@ -201,9 +202,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       )
                     : const Icon(Icons.chevron_right),
                 enabled: info != null && info.fileCount > 0,
-              onTap: info != null && info.fileCount > 0
-                  ? () => _clearCache(info)
-                  : null,
+                onTap: info != null && info.fileCount > 0
+                    ? () => _clearCache(info)
+                    : null,
               );
             },
           ),
