@@ -50,3 +50,40 @@ app.*.map.json
 # Signing secrets (never commit)
 android/app/upload-keystore.jks
 android/key.properties
+
+# 凭据与密钥——绝不入库
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+google-services.json
+GoogleService-Info.plist
+firebase_options.dart
+serviceAccountKey.json
+secrets.json
+credentials.json
+id_rsa
+id_ed25519
+.npmrc
+.netrc
+.git-credentials
+
+# 本机工具配置（含个人绝对路径）
+.claude/
+.vscode/
+
+# 构建产物与安装包
+*.apk
+*.aab
+*.ipa
+
+# 扫描报告产物：报告本身含敏感位置清单，属于隐私文件
+report.json
+report.md
+*-privacy-scan/
+
