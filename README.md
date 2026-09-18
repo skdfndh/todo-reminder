@@ -87,8 +87,7 @@ lib/
 - **通知权限**：Android 13+ 请求通知权限，Android 14+ 请求「精确闹钟」权限；被拒时降级为非精确调度（可能延迟几分钟）。
 - **正式签名**：发布版用固定 release keystore 签名（本地 `android/key.properties` + GitHub Secrets），保证应用内更新可无缝升级。
 - **desugaring**：`flutter_local_notifications` v22 需要 core library desugaring，已在 `android/app/build.gradle.kts` 配置，请勿删除。
-- **代理**：`android/gradle.properties` 里配置了本地代理（`127.0.0.1:7890`）供 Gradle 下载依赖，无代理环境可删除这几行。
 
 ## 许可
 
-MIT License
+[MIT](LICENSE) © 2026 kddsk
