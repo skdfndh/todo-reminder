@@ -136,52 +136,92 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     await showModalBottomSheet<void>(
       context: context,
       sheetAnimationStyle: AppMotion.sheetStyle,
-      builder: (ctx) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.add),
-              title: const Text('新建待办'),
-              onTap: () {
-                Navigator.pop(ctx);
-                Navigator.of(
-                  context,
-                ).push(fadeSlideRoute(TaskEditScreen(initialDate: _selected)));
-              },
-            ),
-            if (quickTasks.isNotEmpty) const ListTile(title: Text('常用一次性待办')),
-            for (final quick in quickTasks)
+      builder: (ctx) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) => SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            children: [
               ListTile(
-                leading: Icon(
-                  Icons.bookmark,
-                  color: priorityColor(quick.priority),
-                ),
-                title: Text(quick.title),
-                onTap: () async {
+                leading: const Icon(Icons.add),
+                title: const Text('新建待办'),
+                onTap: () {
                   Navigator.pop(ctx);
-                  final now = DateTime.now().millisecondsSinceEpoch;
-                  await ref
-                      .read(tasksProvider.notifier)
-                      .add(
-                        Task(
-                          title: quick.title,
-                          note: quick.note,
-                          tags: quick.tags,
-                          repeatType: RepeatType.once,
-                          remindHour: quick.remindHour,
-                          remindMinute: quick.remindMinute,
-                          advanceMinutes: quick.advanceMinutes,
-                          date: dateKey(_selected),
-                          priority: quick.priority,
-                          sourceQuickTaskId: quick.id,
-                          createdAt: now,
-                          updatedAt: now,
-                        ),
-                      );
+                  Navigator.of(context).push(
+                    fadeSlideRoute(TaskEditScreen(initialDate: _selected)),
+                  );
                 },
               ),
-          ],
+              if (quickTasks.isNotEmpty) const ListTile(title: Text('常用一次性待办')),
+              for (final quick in quickTasks)
+                ListTile(
+                  leading: Icon(
+                    Icons.bookmark,
+                    color: priorityColor(quick.priority),
+                  ),
+                  title: Text(quick.title),
+                  trailing: IconButton(
+                    tooltip: '删除常用待办',
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed: quick.id == null
+                        ? null
+                        : () async {
+                            final confirmed = await showDialog<bool>(
+                              context: sheetContext,
+                              builder: (dialogContext) => AlertDialog(
+                                title: const Text('删除常用待办'),
+                                content: Text(
+                                  '确定删除「${quick.title}」吗？已创建的待办会保留。',
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () =>
+                                        Navigator.pop(dialogContext, false),
+                                    child: const Text('取消'),
+                                  ),
+                                  FilledButton(
+                                    onPressed: () =>
+                                        Navigator.pop(dialogContext, true),
+                                    child: const Text('删除'),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (confirmed != true) return;
+                            try {
+                              await ref
+                                  .read(taskRepositoryProvider)
+                                  .deleteQuickTask(quick.id!);
+                              ref.invalidate(quickTasksProvider);
+                              if (sheetContext.mounted) {
+                                setSheetState(
+                                  () => quickTasks.removeWhere(
+                                    (item) => item.id == quick.id,
+                                  ),
+                                );
+                              }
+                            } catch (_) {
+                              if (sheetContext.mounted) {
+                                ScaffoldMessenger.of(sheetContext).showSnackBar(
+                                  const SnackBar(content: Text('删除失败，请重试')),
+                                );
+                              }
+                            }
+                          },
+                  ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.of(context).push(
+                      fadeSlideRoute(
+                        TaskEditScreen(
+                          initialDate: _selected,
+                          quickTask: quick,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+            ],
+          ),
         ),
       ),
     );

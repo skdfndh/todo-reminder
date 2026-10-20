@@ -10,10 +10,16 @@ import '../widgets/pressable_scale.dart';
 const _weekdayNames = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 
 class TaskEditScreen extends ConsumerStatefulWidget {
-  const TaskEditScreen({super.key, this.task, this.initialDate});
+  const TaskEditScreen({
+    super.key,
+    this.task,
+    this.initialDate,
+    this.quickTask,
+  });
 
   final Task? task;
   final DateTime? initialDate;
+  final QuickTask? quickTask;
 
   @override
   ConsumerState<TaskEditScreen> createState() => _TaskEditScreenState();
@@ -43,22 +49,28 @@ class _TaskEditScreenState extends ConsumerState<TaskEditScreen> {
   void initState() {
     super.initState();
     final t = widget.task;
-    _titleCtrl = TextEditingController(text: t?.title ?? '');
-    _noteCtrl = TextEditingController(text: t?.note ?? '');
-    _tagsCtrl = TextEditingController(text: t?.tags.join(',') ?? '');
+    final quick = widget.quickTask;
+    _titleCtrl = TextEditingController(text: t?.title ?? quick?.title ?? '');
+    _noteCtrl = TextEditingController(text: t?.note ?? quick?.note ?? '');
+    _tagsCtrl = TextEditingController(
+      text: t?.tags.join(',') ?? quick?.tags.join(',') ?? '',
+    );
     _repeatType = t?.repeatType ?? RepeatType.once;
-    _time = TimeOfDay(hour: t?.remindHour ?? 9, minute: t?.remindMinute ?? 0);
+    _time = TimeOfDay(
+      hour: t?.remindHour ?? quick?.remindHour ?? 9,
+      minute: t?.remindMinute ?? quick?.remindMinute ?? 0,
+    );
     _date = t?.date != null
         ? DateTime.parse(t!.date!)
         : widget.initialDate ?? DateTime.now();
     _weekdays.addAll(t?.weekdays ?? const {1, 2, 3, 4, 5});
     _dayOfMonth = t?.dayOfMonth ?? 1;
-    _priority = t?.priority ?? Priority.medium;
+    _priority = t?.priority ?? quick?.priority ?? Priority.medium;
     _statisticsEnabled = t?.statisticsEnabled ?? false;
     _startDate = t?.startDate != null ? DateTime.parse(t!.startDate!) : null;
     _endDate = t?.endDate != null ? DateTime.parse(t!.endDate!) : null;
     _enabled = t?.enabled ?? true;
-    _advanceMinutes = t?.advanceMinutes ?? 0;
+    _advanceMinutes = t?.advanceMinutes ?? quick?.advanceMinutes ?? 0;
   }
 
   @override
@@ -134,7 +146,9 @@ class _TaskEditScreenState extends ConsumerState<TaskEditScreen> {
       doneToday: original?.doneToday ?? false,
       doneDate: original?.doneDate,
       doneCount: original?.doneCount ?? 0,
-      sourceQuickTaskId: original?.sourceQuickTaskId,
+      sourceQuickTaskId: _repeatType == RepeatType.once
+          ? original?.sourceQuickTaskId ?? widget.quickTask?.id
+          : null,
       createdAt: original?.createdAt ?? now,
       updatedAt: now,
     );
