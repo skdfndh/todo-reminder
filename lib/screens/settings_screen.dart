@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:open_filex/open_filex.dart';
 
 import '../providers/task_providers.dart';
+import '../providers/work_hours_provider.dart';
 import '../services/cache_service.dart';
 import '../theme.dart';
 import '../utils/motion.dart';
+import '../widgets/developer_mode_section.dart';
 import '../widgets/update_dialog.dart';
 import 'statistics_screen.dart';
 
@@ -225,14 +227,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.download_outlined),
             title: const Text('导入备份'),
-            subtitle: const Text('导入会覆盖当前所有待办、模板和设置'),
+            subtitle: const Text('导入会覆盖待办、模板、设置和备份中的工时记录'),
             onTap: () async {
               final ok = await showDialog<bool>(
                 context: context,
                 animationStyle: AppMotion.sheetStyle,
                 builder: (ctx) => AlertDialog(
                   title: const Text('导入备份'),
-                  content: const Text('确认用备份内容覆盖当前数据吗？'),
+                  content: const Text('确认用备份内容覆盖当前数据吗？旧版备份不含工时时，本机工时记录会保留。'),
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.pop(ctx, false),
@@ -246,12 +248,26 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               );
               if (ok != true) return;
-              final imported = await ref
-                  .read(backupServiceProvider)
-                  .importFromPicker();
-              if (imported) await ref.read(tasksProvider.notifier).rollover();
+              try {
+                final imported = await ref
+                    .read(backupServiceProvider)
+                    .importFromPicker();
+                if (imported) {
+                  ref.invalidate(workHoursProvider);
+                  await ref.read(tasksProvider.notifier).rollover();
+                }
+              } catch (_) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('导入失败，请检查备份文件后重试')),
+                  );
+                }
+              }
             },
           ),
+          const SizedBox(height: 24),
+          Text('开发者选项', style: Theme.of(context).textTheme.titleMedium),
+          const DeveloperModeSection(),
           const SizedBox(height: 24),
           Text('关于跨天', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),

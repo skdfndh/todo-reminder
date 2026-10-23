@@ -1,4 +1,5 @@
 import '../models/task.dart';
+import '../models/work_entry.dart';
 
 import 'package:sqflite/sqflite.dart' show ConflictAlgorithm;
 
@@ -149,11 +150,12 @@ class TaskRepository {
   Future<Map<String, Object?>> exportData() async {
     final db = await _db.database;
     return {
-      'version': 1,
+      'version': 2,
       'tasks': await db.query('tasks'),
       'completions': await db.query('task_completions'),
       'settings': await db.query('settings'),
       'quickTasks': await db.query('quick_tasks'),
+      'workEntries': await db.query('work_entries'),
     };
   }
 
@@ -161,6 +163,9 @@ class TaskRepository {
     final db = await _db.database;
     final tasks = data['tasks'] as List<dynamic>?;
     if (tasks == null) throw const FormatException('备份文件缺少任务数据');
+    final workEntries = (data['workEntries'] as List<dynamic>?)
+        ?.map((row) => WorkEntry.fromMap(Map<String, Object?>.from(row as Map)))
+        .toList();
     await db.transaction((txn) async {
       await txn.delete('task_completions');
       await txn.delete('quick_tasks');
@@ -181,6 +186,39 @@ class TaskRepository {
       for (final row in data['quickTasks'] as List<dynamic>? ?? const []) {
         await txn.insert('quick_tasks', Map<String, Object?>.from(row as Map));
       }
+      // 旧备份没有工时字段，导入时保留本机工时，避免误清空新增数据。
+      if (workEntries != null) {
+        await txn.delete('work_entries');
+        for (final entry in workEntries) {
+          await txn.insert('work_entries', entry.toMap());
+        }
+      }
     });
+  }
+
+  Future<List<WorkEntry>> getWorkEntries() async {
+    final db = await _db.database;
+    final rows = await db.query('work_entries', orderBy: 'date DESC, id DESC');
+    return rows.map(WorkEntry.fromMap).toList();
+  }
+
+  Future<void> saveWorkEntry(WorkEntry entry) async {
+    final db = await _db.database;
+    if (entry.id == null) {
+      await db.insert('work_entries', entry.toMap());
+    } else {
+      final count = await db.update(
+        'work_entries',
+        entry.toMap(),
+        where: 'id = ?',
+        whereArgs: [entry.id],
+      );
+      if (count != 1) throw StateError('工时记录已不存在');
+    }
+  }
+
+  Future<void> deleteWorkEntry(int id) async {
+    final db = await _db.database;
+    await db.delete('work_entries', where: 'id = ?', whereArgs: [id]);
   }
 }

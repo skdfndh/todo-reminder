@@ -19,7 +19,7 @@ class AppDatabase {
     final path = p.join(dir, 'todo_reminder.db');
     return openDatabase(
       path,
-      version: 4,
+      version: 5,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -28,6 +28,7 @@ class AppDatabase {
   Future<void> _onCreate(Database db, int version) async {
     await db.execute(_createTable);
     await _createAuxiliaryTables(db);
+    await _createWorkEntries(db);
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -65,7 +66,18 @@ class AppDatabase {
         'ALTER TABLE tasks ADD COLUMN source_quick_task_id INTEGER',
       );
     }
+    if (oldVersion < 5) await _createWorkEntries(db);
   }
+
+  Future<void> _createWorkEntries(Database db) => db.execute('''
+    CREATE TABLE IF NOT EXISTS work_entries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      date TEXT NOT NULL,
+      minutes INTEGER NOT NULL CHECK (minutes > 0 AND minutes <= 1440),
+      status TEXT NOT NULL CHECK (status IN ('completed', 'planned')),
+      note TEXT NOT NULL DEFAULT ''
+    )
+  ''');
 
   Future<void> _createAuxiliaryTables(Database db) async {
     await db.execute('''
