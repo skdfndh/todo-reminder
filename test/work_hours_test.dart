@@ -51,7 +51,7 @@ Future<ProviderContainer> _container(_WorkRepository repository) async {
 }
 
 void main() {
-  test('自然月统计分开计算计划和完成，跨月的周统计包含整周', () {
+  test('周月统计只计实际工时，旧计划不会占用额度', () {
     final entries = [
       WorkEntry(
         date: DateTime(2026, 8, 30),
@@ -88,26 +88,23 @@ void main() {
     expect(weekStart, DateTime(2026, 8, 31));
     final week = WorkHoursSummary(entries, weekStart, DateTime(2026, 9, 7));
     expect(week.completedMinutes, 270);
-    expect(week.plannedMinutes, 240);
     final month = WorkHoursSummary(
       entries,
       DateTime(2026, 9),
       DateTime(2026, 10),
     );
     expect(month.completedMinutes, 90);
-    expect(month.plannedMinutes, 300);
     expect(month.remainingMinutes, 2310);
-    expect(month.availableMinutes, 2010);
     expect(workWeekStart(DateTime(2027, 1, 1)), DateTime(2026, 12, 28));
   });
 
-  test('分钟累计准确，超额保留负余量，过期计划不会自动计为完成', () {
+  test('实际工时按分钟准确累计，超额保留负余量', () {
     final entries = [
       for (var i = 0; i < 3; i++)
         WorkEntry(
           date: DateTime(2026, 1, 1),
           minutes: 810,
-          status: WorkStatus.planned,
+          status: WorkStatus.completed,
         ),
     ];
     final month = WorkHoursSummary(
@@ -115,9 +112,9 @@ void main() {
       DateTime(2026, 1),
       DateTime(2026, 2),
     );
-    expect(month.completedMinutes, 0);
-    expect(month.availableMinutes, -30);
-    expect(formatWorkMinutes(month.totalMinutes), '40 小时 30 分钟');
+    expect(month.completedMinutes, 2430);
+    expect(month.remainingMinutes, -30);
+    expect(formatWorkMinutes(month.completedMinutes), '40 小时 30 分钟');
     expect(formatWorkMinutes(45), '45 分钟');
   });
 
@@ -134,6 +131,16 @@ void main() {
     expect(saved.date, DateTime(2026, 10, 23));
     expect(saved.minutes, 185);
     expect(saved.note, '图书馆');
+    final legacy = WorkEntry.fromMap({...entry.toMap(), 'status': 'planned'});
+    expect(legacy.toMap()['status'], 'planned');
+    expect(
+      WorkHoursSummary(
+        [legacy],
+        DateTime(2026, 10),
+        DateTime(2026, 11),
+      ).completedMinutes,
+      0,
+    );
     expect(
       () => WorkEntry.fromMap({...entry.toMap(), 'date': '2026-02-30'}),
       throwsFormatException,
@@ -152,13 +159,27 @@ void main() {
     );
   });
 
-  testWidgets('计划按实际工时完成时更新同一条记录，关闭开发者模式阻止修改', (tester) async {
+  test('旧计划不能作为新增工时写入', () async {
+    final repository = TaskRepository(AppDatabase.instance);
+    await expectLater(
+      repository.saveWorkEntry(
+        WorkEntry(
+          date: DateTime.now(),
+          minutes: 120,
+          status: WorkStatus.planned,
+        ),
+      ),
+      throwsFormatException,
+    );
+  });
+
+  testWidgets('实际工时可调整且不重复计数，关闭开发者模式阻止修改', (tester) async {
     final repository = _WorkRepository([
       WorkEntry(
         id: 1,
         date: DateTime.now(),
         minutes: 240,
-        status: WorkStatus.planned,
+        status: WorkStatus.completed,
       ),
     ]);
     final container = await _container(repository);
@@ -168,15 +189,14 @@ void main() {
         container: container,
         child: MaterialApp(
           home: Scaffold(
-            body: WorkEntryDialog(
-              entry: repository.entries.single,
-              completePlan: true,
-            ),
+            body: WorkEntryDialog(entry: repository.entries.single),
           ),
         ),
       ),
     );
     await tester.pumpAndSettle();
+    expect(find.byType(SegmentedButton<WorkStatus>), findsNothing);
+    expect(find.text('计划'), findsNothing);
     await tester.tap(find.text('3 小时'));
     await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
@@ -206,6 +226,12 @@ void main() {
         minutes: 840,
         status: WorkStatus.completed,
       ),
+      WorkEntry(
+        id: 3,
+        date: DateTime.now(),
+        minutes: 240,
+        status: WorkStatus.planned,
+      ),
     ]);
     final container = await _container(repository);
     addTearDown(container.dispose);
@@ -216,26 +242,25 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('计划'));
     await tester.tap(find.text('4 小时'));
     await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
     expect(find.text('超出本月额度'), findsOneWidget);
-    expect(repository.entries.length, 2);
+    expect(repository.entries.length, 3);
     await tester.tap(find.text('返回调整'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('2 小时'));
     await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
-    expect(repository.entries.length, 3);
-    expect(repository.entries.last.status, WorkStatus.planned);
+    expect(repository.entries.length, 4);
+    expect(repository.entries.last.status, WorkStatus.completed);
     final now = DateTime.now();
     final summary = WorkHoursSummary(
       repository.entries,
       DateTime(now.year, now.month),
       DateTime(now.year, now.month + 1),
     );
-    expect(summary.availableMinutes, 0);
+    expect(summary.remainingMinutes, 0);
   });
 
   testWidgets('未来日期不能登记为已完成', (tester) async {
@@ -251,9 +276,8 @@ void main() {
               entry: WorkEntry(
                 date: DateTime.now().add(const Duration(days: 2)),
                 minutes: 120,
-                status: WorkStatus.planned,
+                status: WorkStatus.completed,
               ),
-              completePlan: true,
             ),
           ),
         ),
@@ -262,7 +286,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
-    expect(find.text('未来日期请登记为计划'), findsOneWidget);
+    expect(find.text('实际工时不能登记在未来日期'), findsOneWidget);
     expect(repository.entries, isEmpty);
   });
 
@@ -308,6 +332,39 @@ void main() {
     await tester.pumpAndSettle();
     expect(repository.entries, isEmpty);
     expect(container.read(workHoursProvider).requireValue, isEmpty);
+  });
+
+  testWidgets('旧计划记录不展示且不会变成实际工时', (tester) async {
+    final repository = _WorkRepository([
+      WorkEntry(id: 1, date: DateTime.now(), minutes: 180),
+      WorkEntry(
+        id: 2,
+        date: DateTime.now(),
+        minutes: 240,
+        status: WorkStatus.planned,
+        note: '旧计划',
+      ),
+    ]);
+    final container = await _container(repository);
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: WorkHoursScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('已计划'), findsNothing);
+    expect(find.text('还能安排'), findsNothing);
+    final now = DateTime.now();
+    await tester.scrollUntilVisible(
+      find.text('${now.month}月记录 · 1 次'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('旧计划'), findsNothing);
+    expect(repository.entries.length, 2);
+    expect(repository.entries.last.status, WorkStatus.planned);
   });
 
   testWidgets('小屏工时页面可浏览并切换月份，关闭模式后隐藏页面', (tester) async {

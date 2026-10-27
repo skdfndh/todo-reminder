@@ -6,10 +6,9 @@ import '../models/work_entry.dart';
 import '../providers/work_hours_provider.dart';
 
 class WorkEntryDialog extends ConsumerStatefulWidget {
-  const WorkEntryDialog({super.key, this.entry, this.completePlan = false});
+  const WorkEntryDialog({super.key, this.entry});
 
   final WorkEntry? entry;
-  final bool completePlan;
 
   @override
   ConsumerState<WorkEntryDialog> createState() => _WorkEntryDialogState();
@@ -20,7 +19,6 @@ class _WorkEntryDialogState extends ConsumerState<WorkEntryDialog> {
   final _minutes = TextEditingController();
   final _note = TextEditingController();
   late DateTime _date;
-  late WorkStatus _status;
   String? _error;
   bool _saving = false;
 
@@ -30,9 +28,6 @@ class _WorkEntryDialogState extends ConsumerState<WorkEntryDialog> {
     final entry = widget.entry;
     final now = DateTime.now();
     _date = entry?.date ?? DateTime(now.year, now.month, now.day);
-    _status = widget.completePlan
-        ? WorkStatus.completed
-        : entry?.status ?? WorkStatus.completed;
     _hours.text = ((entry?.minutes ?? 120) ~/ 60).toString();
     _minutes.text = ((entry?.minutes ?? 120) % 60).toString();
     _note.text = entry?.note ?? '';
@@ -61,9 +56,8 @@ class _WorkEntryDialogState extends ConsumerState<WorkEntryDialog> {
       return;
     }
     final now = DateTime.now();
-    if (_status == WorkStatus.completed &&
-        _date.isAfter(DateTime(now.year, now.month, now.day))) {
-      setState(() => _error = '未来日期请登记为计划');
+    if (_date.isAfter(DateTime(now.year, now.month, now.day))) {
+      setState(() => _error = '实际工时不能登记在未来日期');
       return;
     }
     setState(() {
@@ -75,11 +69,10 @@ class _WorkEntryDialogState extends ConsumerState<WorkEntryDialog> {
         id: widget.entry?.id,
         date: _date,
         minutes: hours * 60 + minutes,
-        status: _status,
         note: _note.text.trim(),
       );
       final all = await ref.read(workHoursProvider.future);
-      // 编辑或完成计划时替换原记录，不把同一班次重复计入额度。
+      // 编辑时替换原记录，避免同一班次重复计入额度。
       final other = all.where(
         (item) => entry.id == null || item.id != entry.id,
       );
@@ -89,15 +82,15 @@ class _WorkEntryDialogState extends ConsumerState<WorkEntryDialog> {
         DateTime(_date.year, _date.month + 1),
       );
       if (!mounted) return;
-      if (summary.totalMinutes > WorkHoursSummary.monthlyLimitMinutes) {
+      if (summary.remainingMinutes < 0) {
         final confirmed = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
             title: const Text('超出本月额度'),
             content: Text(
-              '${_date.year}年${_date.month}月已完成与计划合计 '
-              '${formatWorkMinutes(summary.totalMinutes)}，'
-              '超过 40 小时上限 ${formatWorkMinutes(-summary.availableMinutes)}。仍然保存吗？',
+              '${_date.year}年${_date.month}月实际工时合计 '
+              '${formatWorkMinutes(summary.completedMinutes)}，'
+              '超过 40 小时上限 ${formatWorkMinutes(-summary.remainingMinutes)}。仍然保存吗？',
             ),
             actions: [
               TextButton(
@@ -126,13 +119,7 @@ class _WorkEntryDialogState extends ConsumerState<WorkEntryDialog> {
   Widget build(BuildContext context) => PopScope(
     canPop: !_saving,
     child: AlertDialog(
-      title: Text(
-        widget.completePlan
-            ? '完成计划'
-            : widget.entry == null
-            ? '登记工时'
-            : '编辑工时',
-      ),
+      title: Text(widget.entry == null ? '登记工时' : '编辑工时'),
       content: SizedBox(
         width: 400,
         child: SingleChildScrollView(
@@ -140,17 +127,6 @@ class _WorkEntryDialogState extends ConsumerState<WorkEntryDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SegmentedButton<WorkStatus>(
-                showSelectedIcon: false,
-                segments: [
-                  for (final status in WorkStatus.values)
-                    ButtonSegment(value: status, label: Text(status.label)),
-                ],
-                selected: {_status},
-                onSelectionChanged: _saving
-                    ? null
-                    : (value) => setState(() => _status = value.first),
-              ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: const Icon(Icons.event_outlined),
@@ -158,11 +134,13 @@ class _WorkEntryDialogState extends ConsumerState<WorkEntryDialog> {
                 trailing: const Icon(Icons.edit_calendar_outlined),
                 enabled: !_saving,
                 onTap: () async {
+                  final now = DateTime.now();
+                  final today = DateTime(now.year, now.month, now.day);
                   final date = await showDatePicker(
                     context: context,
-                    initialDate: _date,
+                    initialDate: _date.isAfter(today) ? today : _date,
                     firstDate: DateTime(2000),
-                    lastDate: DateTime(2100, 12, 31),
+                    lastDate: today,
                   );
                   if (date != null && mounted) setState(() => _date = date);
                 },

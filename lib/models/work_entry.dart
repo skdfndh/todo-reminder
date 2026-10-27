@@ -1,5 +1,6 @@
 enum WorkStatus {
   completed('已完成'),
+  // 仅用于读取旧版数据库和备份，不再允许新增计划。
   planned('计划');
 
   const WorkStatus(this.label);
@@ -11,7 +12,7 @@ class WorkEntry {
     this.id,
     required DateTime date,
     required this.minutes,
-    required this.status,
+    this.status = WorkStatus.completed,
     this.note = '',
   }) : date = DateTime(date.year, date.month, date.day) {
     if (minutes <= 0 || minutes > 24 * 60) {
@@ -72,19 +73,16 @@ String formatWorkMinutes(int minutes) {
 class WorkHoursSummary {
   WorkHoursSummary(Iterable<WorkEntry> entries, DateTime start, DateTime end) {
     for (final entry in entries) {
-      if (entry.date.isBefore(start) || !entry.date.isBefore(end)) continue;
-      if (entry.status == WorkStatus.completed) {
-        completedMinutes += entry.minutes;
-      } else {
-        plannedMinutes += entry.minutes;
+      if (entry.status != WorkStatus.completed ||
+          entry.date.isBefore(start) ||
+          !entry.date.isBefore(end)) {
+        continue;
       }
+      completedMinutes += entry.minutes;
     }
   }
 
   static const monthlyLimitMinutes = 40 * 60;
   int completedMinutes = 0;
-  int plannedMinutes = 0;
-  int get totalMinutes => completedMinutes + plannedMinutes;
   int get remainingMinutes => monthlyLimitMinutes - completedMinutes;
-  int get availableMinutes => monthlyLimitMinutes - totalMinutes;
 }

@@ -17,11 +17,11 @@ class _WorkHoursScreenState extends ConsumerState<WorkHoursScreen> {
   DateTime _month = DateTime(DateTime.now().year, DateTime.now().month);
   DateTime _week = workWeekStart(DateTime.now());
 
-  Future<void> _edit({WorkEntry? entry, bool completePlan = false}) async {
+  Future<void> _edit({WorkEntry? entry}) async {
     final saved = await showDialog<WorkEntry>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => WorkEntryDialog(entry: entry, completePlan: completePlan),
+      builder: (_) => WorkEntryDialog(entry: entry),
     );
     if (saved != null && mounted) {
       setState(() {
@@ -38,7 +38,7 @@ class _WorkHoursScreenState extends ConsumerState<WorkHoursScreen> {
         title: const Text('删除工时记录'),
         content: Text(
           '删除 ${entry.date.month}月${entry.date.day}日的 '
-          '${formatWorkMinutes(entry.minutes)}${entry.status.label}记录吗？',
+          '${formatWorkMinutes(entry.minutes)}工时记录吗？',
         ),
         actions: [
           TextButton(
@@ -116,7 +116,12 @@ class _WorkHoursScreenState extends ConsumerState<WorkHoursScreen> {
     final week = WorkHoursSummary(entries, _week, weekEnd);
     final lastDay = DateTime(_week.year, _week.month, _week.day + 6);
     final records = entries
-        .where((e) => !e.date.isBefore(_month) && e.date.isBefore(monthEnd))
+        .where(
+          (e) =>
+              e.status == WorkStatus.completed &&
+              !e.date.isBefore(_month) &&
+              e.date.isBefore(monthEnd),
+        )
         .toList();
     final scheme = Theme.of(context).colorScheme;
     return ListView(
@@ -144,23 +149,18 @@ class _WorkHoursScreenState extends ConsumerState<WorkHoursScreen> {
           spacing: 24,
           runSpacing: 16,
           children: [
-            _Total(label: '已完成', minutes: month.completedMinutes),
-            _Total(label: '已计划', minutes: month.plannedMinutes),
+            _Total(label: '实际工时', minutes: month.completedMinutes),
             _Total(
               label: month.remainingMinutes < 0 ? '已超出额度' : '剩余额度',
               minutes: month.remainingMinutes.abs(),
             ),
-            _Total(
-              label: month.availableMinutes < 0 ? '安排超出' : '还能安排',
-              minutes: month.availableMinutes.abs(),
-            ),
           ],
         ),
-        if (month.availableMinutes < 0)
+        if (month.remainingMinutes < 0)
           Padding(
             padding: const EdgeInsets.only(top: 12),
             child: Text(
-              '已完成与计划合计超出 40 小时，请调整后续安排。',
+              '实际工时已超出本月 40 小时额度。',
               style: TextStyle(color: scheme.error),
             ),
           ),
@@ -180,14 +180,7 @@ class _WorkHoursScreenState extends ConsumerState<WorkHoursScreen> {
         ),
         Text('周工时合计', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
-        Wrap(
-          spacing: 24,
-          runSpacing: 12,
-          children: [
-            _Total(label: '已完成', minutes: week.completedMinutes),
-            _Total(label: '已计划', minutes: week.plannedMinutes),
-          ],
-        ),
+        _Total(label: '实际工时', minutes: week.completedMinutes),
         const SizedBox(height: 12),
         for (var index = 0; index < 7; index++)
           _DayRow(
@@ -208,17 +201,11 @@ class _WorkHoursScreenState extends ConsumerState<WorkHoursScreen> {
         for (final entry in records)
           ListTile(
             contentPadding: EdgeInsets.zero,
-            leading: Icon(
-              entry.status == WorkStatus.completed
-                  ? Icons.check_circle_outline
-                  : Icons.event_outlined,
-            ),
+            leading: const Icon(Icons.work_outline),
             title: Text(
               '${entry.date.month}月${entry.date.day}日 · ${formatWorkMinutes(entry.minutes)}',
             ),
-            subtitle: Text(
-              '${entry.status.label}${entry.note.isEmpty ? '' : ' · ${entry.note}'}',
-            ),
+            subtitle: entry.note.isEmpty ? null : Text(entry.note),
             onTap: () => _edit(entry: entry),
             trailing: PopupMenuButton<String>(
               tooltip: '工时操作',
@@ -226,13 +213,11 @@ class _WorkHoursScreenState extends ConsumerState<WorkHoursScreen> {
                 if (action == 'delete') {
                   _delete(entry);
                 } else {
-                  _edit(entry: entry, completePlan: action == 'complete');
+                  _edit(entry: entry);
                 }
               },
               itemBuilder: (_) => [
                 const PopupMenuItem(value: 'edit', child: Text('编辑')),
-                if (entry.status == WorkStatus.planned)
-                  const PopupMenuItem(value: 'complete', child: Text('登记实际工时')),
                 const PopupMenuItem(value: 'delete', child: Text('删除')),
               ],
             ),
@@ -315,8 +300,7 @@ class _DayRow extends StatelessWidget {
           Expanded(
             flex: 2,
             child: Text(
-              '完成 ${formatWorkMinutes(summary.completedMinutes)}'
-              ' · 计划 ${formatWorkMinutes(summary.plannedMinutes)}',
+              formatWorkMinutes(summary.completedMinutes),
               textAlign: TextAlign.end,
             ),
           ),

@@ -198,11 +198,19 @@ class TaskRepository {
 
   Future<List<WorkEntry>> getWorkEntries() async {
     final db = await _db.database;
-    final rows = await db.query('work_entries', orderBy: 'date DESC, id DESC');
+    final rows = await db.query(
+      'work_entries',
+      where: 'status = ?',
+      whereArgs: [WorkStatus.completed.name],
+      orderBy: 'date DESC, id DESC',
+    );
     return rows.map(WorkEntry.fromMap).toList();
   }
 
   Future<void> saveWorkEntry(WorkEntry entry) async {
+    if (entry.status != WorkStatus.completed) {
+      throw const FormatException('只能登记实际工时');
+    }
     final db = await _db.database;
     if (entry.id == null) {
       await db.insert('work_entries', entry.toMap());

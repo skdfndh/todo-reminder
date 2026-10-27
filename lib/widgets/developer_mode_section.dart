@@ -76,7 +76,7 @@ class _DeveloperModeSectionState extends ConsumerState<DeveloperModeSection> {
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.work_outline),
               title: const Text('勤工俭学工时'),
-              subtitle: const Text('每周工时、每月额度与工作计划'),
+              subtitle: const Text('实际工时、每周汇总与每月额度'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute<void>(
