@@ -1,5 +1,12 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:path/path.dart' as p;
-import 'package:sqflite/sqflite.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:sqflite/sqflite.dart' show databaseFactorySqflitePlugin;
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+const _databaseName = 'todo_reminder.db';
 
 /// SQLite 数据库单例，负责建库、建表与迁移。
 class AppDatabase {
@@ -7,21 +14,44 @@ class AppDatabase {
 
   static final AppDatabase instance = AppDatabase._();
 
-  Database? _db;
+  Future<Database>? _opening;
 
   Future<Database> get database async {
-    _db ??= await _init();
-    return _db!;
+    final opening = _opening ??= _init();
+    try {
+      return await opening;
+    } catch (_) {
+      if (identical(_opening, opening)) _opening = null;
+      rethrow;
+    }
   }
 
   Future<Database> _init() async {
-    final dir = await getDatabasesPath();
-    final path = p.join(dir, 'todo_reminder.db');
-    return openDatabase(
+    final useFfi = Platform.isWindows || Platform.isLinux;
+    if (useFfi) sqfliteFfiInit();
+    final factory = useFfi ? databaseFactoryFfi : databaseFactorySqflitePlugin;
+    final path = Platform.isWindows
+        ? await resolveWindowsDatabasePath(
+            factory,
+            await getApplicationSupportDirectory(),
+            [
+              await factory.getDatabasesPath(),
+              p.join(
+                p.dirname(Platform.resolvedExecutable),
+                '.dart_tool',
+                'sqflite_common_ffi',
+                'databases',
+              ),
+            ],
+          )
+        : p.join(await factory.getDatabasesPath(), _databaseName);
+    return factory.openDatabase(
       path,
-      version: 5,
-      onCreate: _onCreate,
-      onUpgrade: _onUpgrade,
+      options: OpenDatabaseOptions(
+        version: 5,
+        onCreate: _onCreate,
+        onUpgrade: _onUpgrade,
+      ),
     );
   }
 
@@ -135,4 +165,40 @@ class AppDatabase {
       updated_at INTEGER NOT NULL
     )
   ''';
+}
+
+@visibleForTesting
+Future<String> resolveWindowsDatabasePath(
+  DatabaseFactory factory,
+  Directory appData,
+  Iterable<String> legacyDirectories,
+) async {
+  await appData.create(recursive: true);
+  final path = p.join(appData.path, _databaseName);
+  if (await File(path).exists()) return path;
+
+  for (final legacyDirectory in legacyDirectories) {
+    final legacyPath = p.join(legacyDirectory, _databaseName);
+    if (!await File(legacyPath).exists()) continue;
+
+    // 用 SQLite 生成完整快照，保留旧库和其中已提交的写入。
+    final staging = await appData.createTemp('db-migration-');
+    try {
+      final candidate = p.join(staging.path, _databaseName);
+      final source = await factory.openDatabase(
+        legacyPath,
+        options: OpenDatabaseOptions(readOnly: true, singleInstance: false),
+      );
+      try {
+        await source.execute('VACUUM INTO ?', [candidate]);
+      } finally {
+        await source.close();
+      }
+      if (!await File(path).exists()) await File(candidate).rename(path);
+    } finally {
+      await staging.delete(recursive: true);
+    }
+    break;
+  }
+  return path;
 }

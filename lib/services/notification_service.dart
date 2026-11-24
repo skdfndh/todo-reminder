@@ -36,6 +36,11 @@ class NotificationService {
     const settings = InitializationSettings(
       android: AndroidInitializationSettings('@mipmap/ic_launcher'),
       iOS: DarwinInitializationSettings(),
+      windows: WindowsInitializationSettings(
+        appName: '待办提醒',
+        appUserModelId: 'Kddsk.TodoReminder',
+        guid: 'a1700f13-9d66-4a77-bb29-6f5a676aa2eb',
+      ),
     );
     await _plugin.initialize(
       settings: settings,

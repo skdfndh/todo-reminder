@@ -5,6 +5,7 @@ import '../data/task_repository.dart';
 import '../models/task.dart';
 import '../providers/task_providers.dart';
 import '../theme.dart';
+import '../utils/task_text_import.dart';
 import '../widgets/pressable_scale.dart';
 
 const _weekdayNames = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
@@ -15,11 +16,13 @@ class TaskEditScreen extends ConsumerStatefulWidget {
     this.task,
     this.initialDate,
     this.quickTask,
+    this.importedDraft,
   });
 
   final Task? task;
   final DateTime? initialDate;
   final QuickTask? quickTask;
+  final ImportedTaskDraft? importedDraft;
 
   @override
   ConsumerState<TaskEditScreen> createState() => _TaskEditScreenState();
@@ -41,6 +44,7 @@ class _TaskEditScreenState extends ConsumerState<TaskEditScreen> {
   DateTime? _endDate;
   bool _enabled = true;
   int _advanceMinutes = 0;
+  bool _timeWasInferred = false;
 
   bool get _isEditing => widget.task != null;
   bool get _isRecurring => _repeatType != RepeatType.once;
@@ -50,19 +54,28 @@ class _TaskEditScreenState extends ConsumerState<TaskEditScreen> {
     super.initState();
     final t = widget.task;
     final quick = widget.quickTask;
-    _titleCtrl = TextEditingController(text: t?.title ?? quick?.title ?? '');
-    _noteCtrl = TextEditingController(text: t?.note ?? quick?.note ?? '');
+    final imported = widget.importedDraft;
+    final deadline = imported?.deadline;
+    _titleCtrl = TextEditingController(
+      text: t?.title ?? quick?.title ?? imported?.title ?? '',
+    );
+    _noteCtrl = TextEditingController(
+      text: t?.note ?? quick?.note ?? imported?.note ?? '',
+    );
     _tagsCtrl = TextEditingController(
       text: t?.tags.join(',') ?? quick?.tags.join(',') ?? '',
     );
     _repeatType = t?.repeatType ?? RepeatType.once;
     _time = TimeOfDay(
-      hour: t?.remindHour ?? quick?.remindHour ?? 9,
-      minute: t?.remindMinute ?? quick?.remindMinute ?? 0,
+      hour: t?.remindHour ?? quick?.remindHour ?? deadline?.hour ?? 9,
+      minute: t?.remindMinute ?? quick?.remindMinute ?? deadline?.minute ?? 0,
     );
     _date = t?.date != null
         ? DateTime.parse(t!.date!)
+        : imported != null
+        ? deadline
         : widget.initialDate ?? DateTime.now();
+    _timeWasInferred = imported?.timeWasInferred ?? false;
     _weekdays.addAll(t?.weekdays ?? const {1, 2, 3, 4, 5});
     _dayOfMonth = t?.dayOfMonth ?? 1;
     _priority = t?.priority ?? quick?.priority ?? Priority.medium;
@@ -83,16 +96,25 @@ class _TaskEditScreenState extends ConsumerState<TaskEditScreen> {
 
   Future<void> _pickTime() async {
     final picked = await showTimePicker(context: context, initialTime: _time);
-    if (picked != null) setState(() => _time = picked);
+    if (picked != null && mounted) {
+      setState(() {
+        _time = picked;
+        _timeWasInferred = false;
+      });
+    }
   }
 
   Future<DateTime?> _pickDay(DateTime initial) async {
     final now = DateTime.now();
+    final first = now.subtract(const Duration(days: 1));
+    final last = now.add(const Duration(days: 365 * 5));
     return showDatePicker(
       context: context,
-      initialDate: initial,
-      firstDate: now.subtract(const Duration(days: 1)),
-      lastDate: now.add(const Duration(days: 365 * 5)),
+      initialDate: initial.isBefore(first) || initial.isAfter(last)
+          ? now
+          : initial,
+      firstDate: first,
+      lastDate: last,
     );
   }
 
@@ -189,6 +211,11 @@ class _TaskEditScreenState extends ConsumerState<TaskEditScreen> {
             advanceMinutes: _advanceMinutes,
           ),
         );
+    try {
+      await ref.read(syncServiceProvider)?.sync(localChanged: true);
+    } catch (_) {
+      // 模板已保存在本机，网络恢复后再随下一次同步上传。
+    }
     ref.invalidate(quickTasksProvider);
     if (mounted) _toast('已存为常用任务');
   }
@@ -196,6 +223,12 @@ class _TaskEditScreenState extends ConsumerState<TaskEditScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final date = _date;
+    final importedDateHasPassed =
+        widget.importedDraft != null &&
+        date != null &&
+        !DateTime(date.year, date.month, date.day, _time.hour, _time.minute)
+            .isAfter(DateTime.now());
     return Scaffold(
       appBar: AppBar(
         title: Text(_isEditing ? '编辑待办' : '新建待办'),
@@ -225,7 +258,7 @@ class _TaskEditScreenState extends ConsumerState<TaskEditScreen> {
           const SizedBox(height: 16),
           TextField(
             controller: _noteCtrl,
-            maxLines: 2,
+            maxLines: widget.importedDraft == null ? 2 : 4,
             decoration: const InputDecoration(
               labelText: '备注（可选）',
               border: OutlineInputBorder(),
@@ -258,6 +291,9 @@ class _TaskEditScreenState extends ConsumerState<TaskEditScreen> {
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.schedule),
             title: const Text('提醒时间'),
+            subtitle: _timeWasInferred
+                ? const Text('原文没有写具体时间，暂填 23:59')
+                : null,
             trailing: Text(
               _time.format(context),
               style: theme.textTheme.titleMedium,
@@ -289,13 +325,18 @@ class _TaskEditScreenState extends ConsumerState<TaskEditScreen> {
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.event),
               title: const Text('提醒日期'),
+              subtitle: date == null
+                  ? const Text('未能确定截止日期，请手动选择')
+                  : importedDateHasPassed
+                  ? const Text('提醒时间已过，请核对')
+                  : null,
               trailing: Text(
-                _displayDate(_date ?? DateTime.now()),
+                date == null ? '选择' : _displayDate(date),
                 style: theme.textTheme.titleMedium,
               ),
               onTap: () async {
                 final d = await _pickDay(_date ?? DateTime.now());
-                if (d != null) setState(() => _date = d);
+                if (d != null && mounted) setState(() => _date = d);
               },
             ),
           if (_repeatType == RepeatType.weekly) ...[

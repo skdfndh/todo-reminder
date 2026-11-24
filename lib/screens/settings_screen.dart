@@ -1,14 +1,19 @@
 import 'package:flutter/material.dart';
+
+import 'dart:io';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:open_filex/open_filex.dart';
 
 import '../providers/task_providers.dart';
 import '../providers/work_hours_provider.dart';
 import '../services/cache_service.dart';
+import '../services/sync_service.dart';
 import '../theme.dart';
 import '../utils/motion.dart';
 import '../widgets/developer_mode_section.dart';
 import '../widgets/update_dialog.dart';
+import 'login_screen.dart';
 import 'statistics_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -20,7 +25,16 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _checkingUpdate = false;
+  bool _syncing = false;
   late Future<CacheInfo> _cacheInfo;
+
+  Future<void> _uploadSettings() async {
+    try {
+      await ref.read(syncServiceProvider)?.sync(localChanged: true);
+    } catch (_) {
+      // 设置已保存在本机，网络恢复后再补传。
+    }
+  }
 
   @override
   void initState() {
@@ -73,11 +87,65 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
+  Future<void> _signIn(SyncService service) async {
+    final signedIn = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+    );
+    if (signedIn == true && mounted) await _syncNow(service);
+  }
+
+  Future<void> _signOut(SyncService service) async {
+    try {
+      await service.signOut();
+      if (mounted) setState(() {});
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('退出登录失败，请重试')),
+        );
+      }
+    }
+  }
+
+  Future<void> _syncNow(SyncService service) async {
+    if (_syncing) return;
+    setState(() => _syncing = true);
+    try {
+      final outcome = await service.sync();
+      if (!mounted) return;
+      if (outcome == SyncOutcome.downloaded) {
+        ref.invalidate(tasksProvider);
+        ref.invalidate(workHoursProvider);
+        ref.invalidate(quickTasksProvider);
+        await ref.read(notificationServiceProvider).rescheduleAll(
+          await ref.read(taskRepositoryProvider).getAll(),
+        );
+      }
+      if (!mounted) return;
+      final message = switch (outcome) {
+        SyncOutcome.uploaded => '已上传本机数据',
+        SyncOutcome.downloaded => '已下载云端数据',
+        SyncOutcome.unchanged => '当前已是最新数据',
+      };
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('同步失败，可以继续使用本机待办')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _syncing = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final mode = ref.watch(sortModeProvider);
     final doneLast = ref.watch(doneLastProvider);
     final themeMode = ref.watch(themeModeProvider);
+    final syncService = ref.watch(syncServiceProvider);
+    final user = syncService?.currentUser;
     return Scaffold(
       appBar: AppBar(
         title: const Text('设置'),
@@ -111,6 +179,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 await ref
                     .read(taskRepositoryProvider)
                     .setSetting('sort_mode', s.first.name);
+                await _uploadSettings();
               },
             ),
           ),
@@ -131,6 +200,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               await ref
                   .read(taskRepositoryProvider)
                   .setSetting('done_last', v.toString());
+              await _uploadSettings();
             },
           ),
           const SizedBox(height: 16),
@@ -148,8 +218,42 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               await ref
                   .read(taskRepositoryProvider)
                   .setSetting('theme_mode', value.first.name);
+              await _uploadSettings();
             },
           ),
+          if (syncService != null) ...[
+            const SizedBox(height: 24),
+            Text('云端账号', style: Theme.of(context).textTheme.titleMedium),
+            if (user == null)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.account_circle_outlined),
+                title: const Text('登录云端账号'),
+                subtitle: const Text('当前待办仅保存在此设备'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => _signIn(syncService),
+              )
+            else ...[
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.account_circle_outlined),
+                title: Text(user.email ?? '已登录'),
+                subtitle: const Text('手机和电脑使用同一份云端数据'),
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.sync),
+                title: Text(_syncing ? '正在同步' : '立即同步'),
+                onTap: _syncing ? null : () => _syncNow(syncService),
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.logout),
+                title: const Text('退出登录'),
+                onTap: _syncing ? null : () => _signOut(syncService),
+              ),
+            ],
+          ],
           const SizedBox(height: 24),
           Text('统计', style: Theme.of(context).textTheme.titleMedium),
           ListTile(
@@ -162,23 +266,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               MaterialPageRoute<void>(builder: (_) => const StatisticsScreen()),
             ),
           ),
-          const SizedBox(height: 24),
-          Text('应用更新', style: Theme.of(context).textTheme.titleMedium),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: _checkingUpdate
-                ? const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.system_update_outlined),
-            title: const Text('检查更新'),
-            subtitle: const Text('检查是否有可下载安装的新版本'),
-            trailing: const Icon(Icons.chevron_right),
-            enabled: !_checkingUpdate,
-            onTap: _checkingUpdate ? null : _checkForUpdate,
-          ),
+          if (Platform.isAndroid) ...[
+            const SizedBox(height: 24),
+            Text('应用更新', style: Theme.of(context).textTheme.titleMedium),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: _checkingUpdate
+                  ? const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.system_update_outlined),
+              title: const Text('检查更新'),
+              subtitle: const Text('检查是否有可下载安装的新版本'),
+              trailing: const Icon(Icons.chevron_right),
+              enabled: !_checkingUpdate,
+              onTap: _checkingUpdate ? null : _checkForUpdate,
+            ),
+          ],
           const SizedBox(height: 24),
           Text('存储空间', style: Theme.of(context).textTheme.titleMedium),
           FutureBuilder<CacheInfo>(
@@ -255,6 +361,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 if (imported) {
                   ref.invalidate(workHoursProvider);
                   await ref.read(tasksProvider.notifier).rollover();
+                  await _uploadSettings();
                 }
               } catch (_) {
                 if (context.mounted) {

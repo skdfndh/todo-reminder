@@ -1,14 +1,15 @@
 # 待办提醒（todo-reminder）
 
-一款纯本地的待办事项提醒 App，Flutter 编写，支持 Android / iOS。以「按天」为视角记录待办，到点弹窗提醒，无需后端、无需登录，数据全部存在手机本地。
+一款 Flutter 编写的跨端待办事项提醒 App，支持 Android、iOS 和 Windows。以「按天」为视角记录待办，到点弹窗提醒，并可通过 Supabase 账号在手机与电脑之间同步数据。
 
 ## 下载安装
 
-最新版本 APK 见 [Releases](https://github.com/skdfndh/todo-reminder/releases)，按手机 CPU 架构选择：
+在 [Releases](https://github.com/skdfndh/todo-reminder/releases/latest) 下载：
 
-- [arm64-v8a（大多数现代手机）](https://github.com/skdfndh/todo-reminder/releases/download/v1.5.2/app-arm64-v8a-release.apk)
-- [armeabi-v7a（老款 32 位设备）](https://github.com/skdfndh/todo-reminder/releases/download/v1.5.2/app-armeabi-v7a-release.apk)
-- [x86_64（模拟器）](https://github.com/skdfndh/todo-reminder/releases/download/v1.5.2/app-x86_64-release.apk)
+- Windows x64：解压 `todo-reminder-windows-x64.zip`，运行其中的 `todo_reminder.exe`。若系统提示缺少运行库，请安装 [Microsoft Visual C++ 运行库（x64）](https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist)。
+- Android：选择 `app-arm64-v8a-release.apk`（多数现代手机）、`app-armeabi-v7a-release.apk`（32 位设备）或 `app-x86_64-release.apk`（部分模拟器）。
+
+首次打开即可离线使用。获准的云端账号可在「设置 → 登录云端账号」登录。
 
 > 安装时如提示「未知来源」请允许；首次打开请允许「通知」和「精确闹钟」权限，否则到点无法准时提醒。
 > 安装过旧版本后再次打开，App 会自动检测 GitHub 上的新版本并引导更新，确认后直接下载安装，无需手动重新下载。
@@ -26,7 +27,8 @@
 - **重要性涂色**：低（蓝灰）/ 中（橙黄）/ 高（红）三档，卡片框内按重要性涂色。
 - **排序与置顶**：可在「按时间 / 重要性优先」间切换，支持手动置顶；可让已完成自动排在未完成下面。
 - **应用内更新**：打开旧版自动检测 GitHub 上的新版本，弹窗展示新旧版本号与更新内容，确认后按设备架构下载安装。
-- **纯本地**：SQLite 存储，无需账号，换机不自动同步。
+- **本地优先**：SQLite 存储，断网仍可查看和编辑；登录后自动同步到个人云端空间。
+- **粘贴文字导入**：从一段通知提取事项、提交要求和截止时间，在新建页核对后保存。
 
 ## 技术栈
 
@@ -36,7 +38,9 @@
 | 本地通知 | `flutter_local_notifications` |
 | 时区处理 | `timezone` + `flutter_timezone` |
 | 本地存储 | `sqflite`（SQLite） |
+| Windows SQLite | `sqflite_common_ffi` |
 | 状态管理 | `flutter_riverpod` |
+| 账号与云同步 | `supabase_flutter` |
 | 应用内更新 | `dio` + `package_info_plus` + `device_info_plus` + `open_filex` |
 
 ## 快速开始
@@ -48,6 +52,22 @@ flutter test                # 单元测试
 flutter build apk --debug   # 打包调试版 APK
 flutter build apk --release # 打包 release（需先配置签名）
 ```
+
+## 云端同步配置
+
+1. 在 Supabase 新建项目，在 SQL Editor 中执行 [`supabase/schema.sql`](supabase/schema.sql)。
+2. 复制 `supabase.example.json` 为 `supabase.json`，填入项目 Connect 页面中的 Project URL 和 Publishable key。`supabase.json` 已忽略，不会提交密钥。
+3. 使用配置启动或构建：
+
+```bash
+flutter run -d windows --dart-define-from-file=supabase.json
+flutter run -d android --dart-define-from-file=supabase.json
+flutter build windows --dart-define-from-file=supabase.json
+```
+
+在 Supabase 管理后台创建并验证允许同步的账号。用于个人同步时，关闭公开注册，并为 `public.user_snapshots` 添加限制性策略，把读写范围限定为该账号的 UID。
+
+两端在设置中登录同一账号后，会在启动和返回应用时同步。本机修改后会尝试上传，两端同时修改时以最后一次成功上传的完整数据为准。云端下载将替换本机待办前，应用会先备份本机已有记录。自动备份文件名以 `todo-reminder-before-sync-` 开头，可从应用的文档目录找到，并通过「设置 → 导入备份」恢复。
 
 APK 产物位于 `build/app/outputs/flutter-apk/`。
 

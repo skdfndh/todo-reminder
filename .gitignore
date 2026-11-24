@@ -43,6 +43,7 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+/android/build/
 
 # Widget Preview related
 .widget_preview/
@@ -67,6 +68,7 @@ firebase_options.dart
 serviceAccountKey.json
 secrets.json
 credentials.json
+supabase.json
 id_rsa
 id_ed25519
 .npmrc

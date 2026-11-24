@@ -8,6 +8,9 @@ import '../services/notification_service.dart';
 import '../services/backup_service.dart';
 import '../services/cache_service.dart';
 import '../services/update_service.dart';
+import '../services/sync_service.dart';
+
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// 列表排序方式。
 enum SortMode {
@@ -36,6 +39,14 @@ final backupServiceProvider = Provider<BackupService>((ref) {
 });
 
 final cacheServiceProvider = Provider<CacheService>((ref) => CacheService());
+
+final cloudClientProvider = StateProvider<SupabaseClient?>((ref) => null);
+
+final syncServiceProvider = Provider<SyncService?>((ref) {
+  final client = ref.watch(cloudClientProvider);
+  if (client == null) return null;
+  return SyncService(ref.read(taskRepositoryProvider), client);
+});
 
 final sortModeProvider = StateProvider<SortMode>((ref) => SortMode.time);
 
@@ -118,6 +129,14 @@ class TasksNotifier extends AsyncNotifier<List<Task>> {
   TaskRepository get _repo => ref.read(taskRepositoryProvider);
   NotificationService get _notif => ref.read(notificationServiceProvider);
 
+  Future<void> _upload() async {
+    try {
+      await ref.read(syncServiceProvider)?.sync(localChanged: true);
+    } catch (_) {
+      // 本地保存优先；网络恢复后会根据未同步标记补传。
+    }
+  }
+
   @override
   Future<List<Task>> build() async {
     final tasks = await _repo.getAll();
@@ -151,6 +170,7 @@ class TasksNotifier extends AsyncNotifier<List<Task>> {
     final saved = await _repo.insert(task);
     if (saved.enabled) await _notif.scheduleTask(saved);
     await _refresh();
+    await _upload();
   }
 
   Future<void> updateTask(Task task) async {
@@ -158,12 +178,14 @@ class TasksNotifier extends AsyncNotifier<List<Task>> {
     final saved = await _repo.update(task);
     if (saved.enabled) await _notif.scheduleTask(saved);
     await _refresh();
+    await _upload();
   }
 
   Future<void> remove(Task task) async {
     await _notif.cancelTaskById(task.id);
     await _repo.delete(task.id!);
     await _refresh();
+    await _upload();
   }
 
   Future<void> setEnabled(Task task, bool enabled) async {
@@ -171,6 +193,7 @@ class TasksNotifier extends AsyncNotifier<List<Task>> {
     final saved = await _repo.update(task.copyWith(enabled: enabled));
     if (enabled) await _notif.scheduleTask(saved);
     await _refresh();
+    await _upload();
   }
 
   Future<void> toggleDone(Task task, DateTime viewDay) async {
@@ -203,6 +226,7 @@ class TasksNotifier extends AsyncNotifier<List<Task>> {
       }
     }
     await _refresh();
+    await _upload();
   }
 
   Future<void> togglePin(Task task) async {
@@ -213,6 +237,7 @@ class TasksNotifier extends AsyncNotifier<List<Task>> {
       ),
     );
     await _refresh();
+    await _upload();
   }
 
   /// 午夜跨天：重排通知、刷新列表。

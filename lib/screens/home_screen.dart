@@ -1,15 +1,20 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/task.dart';
 import '../providers/task_providers.dart';
+import '../providers/work_hours_provider.dart';
 import '../services/notification_service.dart';
+import '../services/sync_service.dart';
 import '../theme.dart';
 import '../utils/motion.dart';
 import '../utils/routes.dart';
+import '../utils/task_text_import.dart';
 import '../widgets/pressable_scale.dart';
+import '../widgets/task_import_dialog.dart';
 import '../widgets/task_tile.dart';
 import '../widgets/update_dialog.dart';
 import 'settings_screen.dart';
@@ -24,7 +29,8 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends ConsumerState<HomeScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen>
+    with WidgetsBindingObserver {
   static const _initialPage = 10000;
 
   late DateTime _selected;
@@ -40,6 +46,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     final now = DateTime.now();
     _selected = DateTime(now.year, now.month, now.day);
     _pageAnchor = _selected;
@@ -49,6 +56,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _notificationService.openedTaskId.addListener(_openFromNotification);
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _openFromNotification(),
+    );
+    ref.listenManual(
+      syncServiceProvider,
+      (_, service) {
+        if (service != null) unawaited(_syncFromCloud());
+      },
+      fireImmediately: true,
     );
     // 每 30 秒检查一次是否跨天，午夜自动进入新日期并重排通知。
     _timer = Timer.periodic(const Duration(seconds: 30), (_) {
@@ -64,17 +78,39 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     });
     // 首帧渲染后后台检查更新（fire-and-forget，异常内部静默，不阻塞启动）。
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) unawaited(checkForUpdatesAndPrompt(context, ref));
+      if (mounted && Platform.isAndroid) {
+        unawaited(checkForUpdatesAndPrompt(context, ref));
+      }
     });
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _notificationService.openedTaskId.removeListener(_openFromNotification);
     _timer?.cancel();
     _pageController.dispose();
     _searchCtrl.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) unawaited(_syncFromCloud());
+  }
+
+  Future<void> _syncFromCloud() async {
+    try {
+      final outcome = await ref.read(syncServiceProvider)?.sync();
+      if (outcome != SyncOutcome.downloaded || !mounted) return;
+      ref.invalidate(tasksProvider);
+      ref.invalidate(workHoursProvider);
+      ref.invalidate(quickTasksProvider);
+      final tasks = await ref.read(taskRepositoryProvider).getAll();
+      await ref.read(notificationServiceProvider).rescheduleAll(tasks);
+    } catch (_) {
+      // 保持本地可用，网络恢复后再次同步。
+    }
   }
 
   void _openFromNotification() {
@@ -151,6 +187,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   );
                 },
               ),
+              ListTile(
+                leading: const Icon(Icons.content_paste),
+                title: const Text('粘贴文字导入'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _importTask();
+                },
+              ),
               if (quickTasks.isNotEmpty) const ListTile(title: Text('常用一次性待办')),
               for (final quick in quickTasks)
                 ListTile(
@@ -191,6 +235,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               await ref
                                   .read(taskRepositoryProvider)
                                   .deleteQuickTask(quick.id!);
+                              try {
+                                await ref
+                                    .read(syncServiceProvider)
+                                    ?.sync(localChanged: true);
+                              } catch (_) {
+                                // 删除已在本机生效，网络恢复后再补传。
+                              }
                               ref.invalidate(quickTasksProvider);
                               if (sheetContext.mounted) {
                                 setSheetState(
@@ -224,6 +275,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Future<void> _importTask() async {
+    final draft = await showDialog<ImportedTaskDraft>(
+      context: context,
+      builder: (_) => const TaskImportDialog(),
+    );
+    if (draft == null || !mounted) return;
+    await Navigator.of(context).push(
+      fadeSlideRoute(TaskEditScreen(importedDraft: draft)),
     );
   }
 
@@ -275,138 +337,153 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           child: const Icon(Icons.add),
         ),
       ),
-      body: tasksAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('加载失败：$e')),
-        data: (tasks) {
-          Widget buildDayPage(DateTime day) {
-            final isToday = dateKey(day) == _todayKey;
-            final searching = _query.trim().isNotEmpty;
-            final searchTasks = searching
-                ? tasks.where(_matches).toList()
-                : const <Task>[];
-            final active = sortTasks(
-              tasks.where((t) => t.isActiveOn(day) && _matches(t)).toList(),
-              mode,
-              doneLast: doneLast,
-              viewDay: day,
-            );
-            final future = isToday ? _tomorrowImportant(tasks) : const <Task>[];
-            return Column(
-              children: [
-                _DateHeader(
-                  selected: day,
-                  isToday: isToday,
-                  onPrev: () =>
-                      _selectDay(day.subtract(const Duration(days: 1))),
-                  onNext: () => _selectDay(day.add(const Duration(days: 1))),
-                  onJump: _jump,
-                  onGoToday: _goToday,
-                ),
-                Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.only(bottom: 96),
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-                        child: TextField(
-                          controller: _searchCtrl,
-                          onChanged: (value) => setState(() => _query = value),
-                          decoration: const InputDecoration(
-                            isDense: true,
-                            contentPadding: EdgeInsets.symmetric(vertical: 10),
-                            prefixIcon: Icon(Icons.search, size: 24),
-                            prefixIconConstraints: BoxConstraints(
-                              minWidth: 48,
-                              minHeight: 40,
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 960),
+          child: tasksAsync.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (e, _) => Center(child: Text('加载失败：$e')),
+            data: (tasks) {
+              Widget buildDayPage(DateTime day) {
+                final isToday = dateKey(day) == _todayKey;
+                final searching = _query.trim().isNotEmpty;
+                final searchTasks = searching
+                    ? tasks.where(_matches).toList()
+                    : const <Task>[];
+                final active = sortTasks(
+                  tasks.where((t) => t.isActiveOn(day) && _matches(t)).toList(),
+                  mode,
+                  doneLast: doneLast,
+                  viewDay: day,
+                );
+                final future = isToday
+                    ? _tomorrowImportant(tasks)
+                    : const <Task>[];
+                return Column(
+                  children: [
+                    _DateHeader(
+                      selected: day,
+                      isToday: isToday,
+                      onPrev: () =>
+                          _selectDay(day.subtract(const Duration(days: 1))),
+                      onNext: () =>
+                          _selectDay(day.add(const Duration(days: 1))),
+                      onJump: _jump,
+                      onGoToday: _goToday,
+                    ),
+                    Expanded(
+                      child: ListView(
+                        padding: const EdgeInsets.only(bottom: 96),
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                            child: TextField(
+                              controller: _searchCtrl,
+                              onChanged: (value) =>
+                                  setState(() => _query = value),
+                              decoration: const InputDecoration(
+                                isDense: true,
+                                contentPadding: EdgeInsets.symmetric(
+                                  vertical: 10,
+                                ),
+                                prefixIcon: Icon(Icons.search, size: 24),
+                                prefixIconConstraints: BoxConstraints(
+                                  minWidth: 48,
+                                  minHeight: 40,
+                                ),
+                                hintText: '搜索事项、备注或标签',
+                                border: OutlineInputBorder(),
+                              ),
                             ),
-                            hintText: '搜索事项、备注或标签',
-                            border: OutlineInputBorder(),
                           ),
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        child: Align(
-                          alignment: Alignment.centerRight,
-                          child: TextButton.icon(
-                            onPressed: () => setState(
-                              () => _calendarVisible = !_calendarVisible,
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton.icon(
+                                onPressed: () => setState(
+                                  () => _calendarVisible = !_calendarVisible,
+                                ),
+                                icon: Icon(
+                                  _calendarVisible
+                                      ? Icons.calendar_month
+                                      : Icons.calendar_month_outlined,
+                                ),
+                                label: Text(_calendarVisible ? '收起日历' : '展开日历'),
+                              ),
                             ),
-                            icon: Icon(
-                              _calendarVisible
-                                  ? Icons.calendar_month
-                                  : Icons.calendar_month_outlined,
-                            ),
-                            label: Text(_calendarVisible ? '收起日历' : '展开日历'),
                           ),
-                        ),
-                      ),
-                      AnimatedSize(
-                        duration: reduce
-                            ? Duration.zero
-                            : AppMotion.stateDuration,
-                        curve: AppMotion.easeOut,
-                        child: _calendarVisible || searching
-                            ? _MonthCalendar(
-                                selected: day,
-                                tasks: tasks,
-                                searchTasks: searchTasks,
-                                onSelect: _selectDay,
-                              )
-                            : const SizedBox.shrink(),
-                      ),
-                      (active.isEmpty && future.isEmpty)
-                          ? _EmptyState(isToday: isToday, selected: day)
-                          : Column(
-                              children: [
-                                for (final t in active)
-                                  TaskTile(
-                                    task: t,
-                                    done: t.isDoneOn(day),
-                                    onTap: () => Navigator.of(context).push(
-                                      fadeSlideRoute(TaskEditScreen(task: t)),
-                                    ),
-                                    onToggleDone: () => ref
-                                        .read(tasksProvider.notifier)
-                                        .toggleDone(t, day),
-                                    canToggle: !day.isAfter(
-                                      DateTime(
-                                        DateTime.now().year,
-                                        DateTime.now().month,
-                                        DateTime.now().day,
+                          AnimatedSize(
+                            duration: reduce
+                                ? Duration.zero
+                                : AppMotion.stateDuration,
+                            curve: AppMotion.easeOut,
+                            child: _calendarVisible || searching
+                                ? _MonthCalendar(
+                                    selected: day,
+                                    tasks: tasks,
+                                    searchTasks: searchTasks,
+                                    onSelect: _selectDay,
+                                  )
+                                : const SizedBox.shrink(),
+                          ),
+                          (active.isEmpty && future.isEmpty)
+                              ? _EmptyState(isToday: isToday, selected: day)
+                              : Column(
+                                  children: [
+                                    for (final t in active)
+                                      TaskTile(
+                                        task: t,
+                                        done: t.isDoneOn(day),
+                                        onTap: () => Navigator.of(context).push(
+                                          fadeSlideRoute(
+                                            TaskEditScreen(task: t),
+                                          ),
+                                        ),
+                                        onToggleDone: () => ref
+                                            .read(tasksProvider.notifier)
+                                            .toggleDone(t, day),
+                                        canToggle: !day.isAfter(
+                                          DateTime(
+                                            DateTime.now().year,
+                                            DateTime.now().month,
+                                            DateTime.now().day,
+                                          ),
+                                        ),
+                                        onTogglePin: () => ref
+                                            .read(tasksProvider.notifier)
+                                            .togglePin(t),
+                                        onDelete: () => _confirmDelete(t),
                                       ),
-                                    ),
-                                    onTogglePin: () => ref
-                                        .read(tasksProvider.notifier)
-                                        .togglePin(t),
-                                    onDelete: () => _confirmDelete(t),
-                                  ),
-                                if (future.isNotEmpty)
-                                  _FutureSection(
-                                    tasks: future,
-                                    tomorrow: day.add(const Duration(days: 1)),
-                                    onOpen: (_) => _selectDay(
-                                      day.add(const Duration(days: 1)),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                    ],
-                  ),
-                ),
-              ],
-            );
-          }
+                                    if (future.isNotEmpty)
+                                      _FutureSection(
+                                        tasks: future,
+                                        tomorrow: day.add(
+                                          const Duration(days: 1),
+                                        ),
+                                        onOpen: (_) => _selectDay(
+                                          day.add(const Duration(days: 1)),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+              }
 
-          if (reduce) return buildDayPage(_selected);
-          return PageView.builder(
-            controller: _pageController,
-            onPageChanged: (page) =>
-                setState(() => _selected = _dayForPage(page)),
-            itemBuilder: (context, page) => buildDayPage(_dayForPage(page)),
-          );
-        },
+              if (reduce) return buildDayPage(_selected);
+              return PageView.builder(
+                controller: _pageController,
+                onPageChanged: (page) =>
+                    setState(() => _selected = _dayForPage(page)),
+                itemBuilder: (context, page) => buildDayPage(_dayForPage(page)),
+              );
+            },
+          ),
+        ),
       ),
     );
   }

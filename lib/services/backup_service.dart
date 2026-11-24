@@ -13,13 +13,26 @@ class BackupService {
   final TaskRepository _repository;
 
   Future<String> exportToFile() async {
-    final data = await _repository.exportData();
-    final dir = await getApplicationDocumentsDirectory();
     final now = DateTime.now();
-    final name =
-        'todo-reminder-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}.json';
-    final file = File('${dir.path}/$name');
-    await file.writeAsString(const JsonEncoder.withIndent('  ').convert(data));
+    final date =
+        '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
+    return _writeBackup(await _repository.exportData(), 'todo-reminder-$date');
+  }
+
+  Future<String> preserveBeforeSync(Map<String, Object?> data) {
+    return _writeBackup(
+      data,
+      'todo-reminder-before-sync-${DateTime.now().microsecondsSinceEpoch}',
+    );
+  }
+
+  Future<String> _writeBackup(Map<String, Object?> data, String name) async {
+    final dir = await getApplicationDocumentsDirectory();
+    final file = File('${dir.path}/$name.json');
+    await file.writeAsString(
+      const JsonEncoder.withIndent('  ').convert(data),
+      flush: true,
+    );
     return file.path;
   }
 

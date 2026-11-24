@@ -42,7 +42,12 @@ jobs:
         env:
           KEYSTORE_PATH: upload-keystore.jks
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-        run: flutter build apk --release --split-per-abi
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          flutter build apk --release --split-per-abi \
+            --dart-define=SUPABASE_URL="$SUPABASE_URL" \
+            --dart-define=SUPABASE_PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY"
 
       - name: Prepare release notes
         run: |
@@ -58,6 +63,7 @@ jobs:
       - name: Upload Release
         uses: softprops/action-gh-release@v2
         with:
+          draft: true
           files: build/app/outputs/flutter-apk/*.apk
           body_path: RELEASE_NOTES.md
         env:
